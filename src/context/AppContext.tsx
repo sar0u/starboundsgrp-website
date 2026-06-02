@@ -23,13 +23,14 @@ interface AppState {
   likedItems: Set<string>;
   notifications: Notification[];
   stats: { scenepacks: number; tutorials: number; audio: number; users: number };
+  recoveryMode: boolean;
 }
 
 interface AppActions {
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   loginWithDiscord: () => Promise<{ ok: boolean; error?: string; redirected?: boolean }>;
   register: (name: string, email: string, password: string, role: 'admin' | 'user') => Promise<{ ok: boolean; error?: string; needsVerification?: boolean }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshData: () => Promise<void>;
   addScenepack: (data: Partial<Scenepack>) => Promise<{ ok: boolean; error?: string }>;
   addTutorial: (data: Partial<Tutorial>) => Promise<{ ok: boolean; error?: string }>;
@@ -43,6 +44,12 @@ interface AppActions {
   notify: (type: Notification['type'], message: string) => void;
   listUsers: () => Promise<import('../backend/models').User[]>;
   setUserRole: (targetUserId: string, newRole: 'admin' | 'user') => Promise<{ ok: boolean; error?: string }>;
+  requestPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
+  updatePassword: (newPassword: string) => Promise<{ ok: boolean; error?: string }>;
+  updateProfile: (updates: { name?: string; phone?: string; bio?: string; avatar?: string }) => Promise<{ ok: boolean; error?: string }>;
+  updateEmail: (newEmail: string) => Promise<{ ok: boolean; error?: string }>;
+  inviteAdmin: (email: string) => Promise<{ ok: boolean; error?: string }>;
+  clearRecoveryMode: () => void;
   isAdmin: boolean;
 }
 
@@ -61,6 +68,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [likedItems, setLikedItems] = useState<Set<string>>(new Set());
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState({ scenepacks: 0, tutorials: 0, audio: 0, users: 0 });
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   // ─── Toast notifications ────────────────────────────────────
   const notify = useCallback((type: Notification['type'], message: string) => {
@@ -107,6 +115,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setLikedItems(new Set());
+      } else if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryMode(true);
+        notify('info', 'Set your new password to continue.');
       }
     });
     return () => subscription.unsubscribe();
@@ -164,9 +176,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [notify, refreshData]);
 
   const logout = useCallback(async () => {
-    await api.apiLogout();
+    // Reset UI state IMMEDIATELY so the user sees the sign-out happen,
+    // even if Supabase is slow or fails.
     setUser(null);
     setLikedItems(new Set());
+    setRecoveryMode(false);
+    try {
+      await api.apiLogout();
+    } catch { /* don't crash on transient network issue */ }
     notify('info', 'Signed out.');
   }, [notify]);
 
@@ -270,6 +287,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { ok: false, error: res.error };
   }, [user, notify]);
 
+  // ─── Password reset ───────────────────────────────────────
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const res = await api.apiRequestPasswordReset(email);
+    if (res.ok) notify('success', 'Password reset email sent. Check your inbox!');
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  }, [notify]);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    const res = await api.apiUpdatePassword(newPassword);
+    if (res.ok) {
+      notify('success', 'Password updated.');
+      setRecoveryMode(false);
+      return { ok: true };
+    }
+    return { ok: false, error: res.error };
+  }, [notify]);
+
+  // ─── Profile management ──────────────────────────────────
+  const updateProfile = useCallback(async (updates: { name?: string; phone?: string; bio?: string; avatar?: string }) => {
+    const res = await api.apiUpdateProfile(updates);
+    if (res.ok && res.data) {
+      setUser(res.data);
+      notify('success', 'Profile updated.');
+      return { ok: true };
+    }
+    return { ok: false, error: res.error };
+  }, [notify]);
+
+  const updateEmail = useCallback(async (newEmail: string) => {
+    const res = await api.apiUpdateEmail(newEmail);
+    if (res.ok) {
+      notify('info', `A confirmation link was sent to ${newEmail}. Click it to finalize the change.`);
+      return { ok: true };
+    }
+    return { ok: false, error: res.error };
+  }, [notify]);
+
+  // ─── Admin invitation ────────────────────────────────────
+  const inviteAdmin = useCallback(async (email: string) => {
+    if (!user) return { ok: false, error: 'Not signed in.' };
+    const res = await api.apiInviteAdmin(user.id, email);
+    if (res.ok) {
+      notify('success', `Invitation sent to ${email}`);
+      return { ok: true };
+    }
+    return { ok: false, error: res.error };
+  }, [user, notify]);
+
+  const clearRecoveryMode = useCallback(() => setRecoveryMode(false), []);
+
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -282,6 +349,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       download, toggleLike,
       sendMessage, loadMessages, notify,
       listUsers, setUserRole,
+      requestPasswordReset, updatePassword,
+      updateProfile, updateEmail,
+      inviteAdmin,
+      recoveryMode, clearRecoveryMode,
       isAdmin,
     }}>
       {children}
