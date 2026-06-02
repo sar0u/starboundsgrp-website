@@ -12,23 +12,37 @@ import type { ApiResponse } from './api';
 // promote/demote any other user without touching this list.
 const ADMIN_EMAILS = ['sarah.4univ@gmail.com'];
 
+const INVITED_KEY = 'sgrp_invited_admins'; // local fallback list
 
 function ok<T>(data: T, status = 200): ApiResponse<T> { return { ok: true, data, status }; }
 function ko(error: string, status = 400): ApiResponse<never> { return { ok: false, error, status }; }
+
+function getInvitedAdmins(): string[] {
+  try { return JSON.parse(localStorage.getItem(INVITED_KEY) || '[]'); } catch { return []; }
+}
+function addInvitedAdmin(email: string) {
+  const list = getInvitedAdmins();
+  const lower = email.toLowerCase();
+  if (!list.includes(lower)) {
+    list.push(lower);
+    localStorage.setItem(INVITED_KEY, JSON.stringify(list));
+  }
+}
 
 function buildUser(authUser: any): User {
   const meta = authUser.user_metadata || {};
   const email = (authUser.email || '').toLowerCase();
   const name: string = meta.name || meta.full_name || meta.preferred_username || meta.user_name || email.split('@')[0] || 'Editor';
   const explicitRole = (meta.role as Role | undefined);
-  const role: Role = explicitRole === 'admin' || ADMIN_EMAILS.includes(email) ? 'admin' : 'user';
+  const invited = !!meta.invitedAsAdmin || getInvitedAdmins().includes(email);
+  const role: Role = explicitRole === 'admin' || ADMIN_EMAILS.includes(email) || invited ? 'admin' : 'user';
   return {
     id: authUser.id,
     name,
     email,
-    passwordHash: '', // never stored client-side with Supabase
+    passwordHash: '',
     role,
-    avatar: name.slice(0, 2).toUpperCase(),
+    avatar: (meta.avatar as string) || name.slice(0, 2).toUpperCase(),
     joinedAt: authUser.created_at || new Date().toISOString(),
     lastLogin: new Date().toISOString(),
     bio: meta.bio || '',
@@ -110,7 +124,15 @@ export async function sbGetCurrentUser(): Promise<ApiResponse<User | null>> {
 
 export async function sbLogout(): Promise<ApiResponse<boolean>> {
   if (!supabase) return ok(true);
-  await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch { /* swallow — we'll force-clear below */ }
+  // Belt-and-suspenders: nuke any cached Supabase tokens from storage
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-') || k.includes('supabase'))
+      .forEach(k => localStorage.removeItem(k));
+  } catch { /* ignore */ }
   return ok(true);
 }
 
@@ -122,6 +144,72 @@ export async function sbResendVerification(email: string): Promise<ApiResponse<b
     options: { emailRedirectTo: `${window.location.origin}` },
   });
   if (error) return ko(error.message, 400);
+  return ok(true);
+}
+
+// ─── Password reset ─────────────────────────────────────────
+export async function sbRequestPasswordReset(email: string): Promise<ApiResponse<boolean>> {
+  if (!supabase) return ko('Supabase not configured.', 500);
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo: `${window.location.origin}`,
+  });
+  if (error) return ko(translateError(error.message), 400);
+  return ok(true);
+}
+
+export async function sbUpdatePassword(newPassword: string): Promise<ApiResponse<boolean>> {
+  if (!supabase) return ko('Supabase not configured.', 500);
+  if (newPassword.length < 6) return ko('Password must be at least 6 characters.', 400);
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) return ko(translateError(error.message), 400);
+  return ok(true);
+}
+
+// ─── Profile update ─────────────────────────────────────────
+export async function sbUpdateProfile(updates: { name?: string; phone?: string; bio?: string; avatar?: string }): Promise<ApiResponse<User>> {
+  if (!supabase) return ko('Supabase not configured.', 500);
+  const data: Record<string, any> = {};
+  if (updates.name !== undefined) data.name = updates.name.trim();
+  if (updates.phone !== undefined) data.phone = updates.phone.trim();
+  if (updates.bio !== undefined) data.bio = updates.bio.trim();
+  if (updates.avatar !== undefined) data.avatar = updates.avatar.trim().slice(0, 4).toUpperCase();
+  const payload: any = { data };
+  if (updates.phone !== undefined && updates.phone.trim()) {
+    // Supabase stores phone separately too; safe to set
+    payload.phone = updates.phone.trim();
+  }
+  const { data: res, error } = await supabase.auth.updateUser(payload);
+  if (error) return ko(translateError(error.message), 400);
+  if (!res.user) return ko('Update failed.', 500);
+  return ok(buildUser(res.user));
+}
+
+export async function sbUpdateEmail(newEmail: string): Promise<ApiResponse<boolean>> {
+  if (!supabase) return ko('Supabase not configured.', 500);
+  const { error } = await supabase.auth.updateUser({ email: newEmail.trim().toLowerCase() });
+  if (error) return ko(translateError(error.message), 400);
+  return ok(true);
+}
+
+// ─── Admin invitation ───────────────────────────────────────
+export async function sbInviteAdmin(email: string): Promise<ApiResponse<boolean>> {
+  if (!supabase) return ko('Supabase not configured.', 500);
+  const lower = email.trim().toLowerCase();
+  if (!lower.includes('@')) return ko('Invalid email address.', 400);
+  // Remember this address — so when they sign up we instantly grant admin role
+  addInvitedAdmin(lower);
+  // Send a magic link with metadata flag. If they're new → they get an
+  // invitation email and a one-click sign-up. If they already have an
+  // account → they get a sign-in link.
+  const { error } = await supabase.auth.signInWithOtp({
+    email: lower,
+    options: {
+      data: { invitedAsAdmin: true, role: 'admin' },
+      emailRedirectTo: `${window.location.origin}`,
+      shouldCreateUser: true,
+    },
+  });
+  if (error) return ko(translateError(error.message), 400);
   return ok(true);
 }
 
