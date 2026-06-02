@@ -10,7 +10,10 @@ import { loadTable, saveTable, loadRecord, saveRecord, generateId } from './data
 import { seedUsers, seedScenepacks, seedTutorials, seedAudioTracks, seedRooms, seedMessages } from './seed';
 import type { User, Session, Scenepack, Tutorial, AudioTrack, ChatMessage, ChatRoom, Booking, DownloadLog, Role } from './models';
 import { isSupabaseEnabled } from './supabase';
-import { sbLogin, sbRegister, sbLoginWithDiscord, sbGetCurrentUser, sbLogout, sbResendVerification } from './authSupabase';
+import {
+  sbLogin, sbRegister, sbLoginWithDiscord, sbGetCurrentUser, sbLogout, sbResendVerification,
+  sbRequestPasswordReset, sbUpdatePassword, sbUpdateProfile, sbUpdateEmail, sbInviteAdmin,
+} from './authSupabase';
 
 export { isSupabaseEnabled };
 
@@ -143,6 +146,48 @@ export async function apiLogout(): Promise<ApiResponse<boolean>> {
 
 export async function apiResendVerification(email: string): Promise<ApiResponse<boolean>> {
   if (isSupabaseEnabled) return sbResendVerification(email);
+  return success(true);
+}
+
+// ─── Password reset ────────────────────────────────────────
+export async function apiRequestPasswordReset(email: string): Promise<ApiResponse<boolean>> {
+  if (isSupabaseEnabled) return sbRequestPasswordReset(email);
+  return success(true); // demo mode no-op
+}
+
+export async function apiUpdatePassword(newPassword: string): Promise<ApiResponse<boolean>> {
+  if (isSupabaseEnabled) return sbUpdatePassword(newPassword);
+  return success(true);
+}
+
+// ─── Profile management ───────────────────────────────────
+export async function apiUpdateProfile(updates: { name?: string; phone?: string; bio?: string; avatar?: string }): Promise<ApiResponse<User>> {
+  if (isSupabaseEnabled) return sbUpdateProfile(updates);
+  // Local demo mode: update the user record
+  const users = loadTable<User>('users', seedUsers);
+  const sess = loadRecord<Session | null>('session', null);
+  if (!sess) return fail('Not signed in.', 401);
+  const u = users.find(x => x.id === sess.userId);
+  if (!u) return fail('User not found.', 404);
+  if (updates.name !== undefined) u.name = updates.name.trim() || u.name;
+  if (updates.bio !== undefined) u.bio = updates.bio.trim();
+  if (updates.avatar !== undefined) u.avatar = updates.avatar.trim().slice(0, 4).toUpperCase() || u.avatar;
+  saveTable('users', users);
+  return success(u);
+}
+
+export async function apiUpdateEmail(newEmail: string): Promise<ApiResponse<boolean>> {
+  if (isSupabaseEnabled) return sbUpdateEmail(newEmail);
+  return success(true);
+}
+
+// ─── Admin invitation by email ────────────────────────────
+export async function apiInviteAdmin(currentUserId: string, email: string): Promise<ApiResponse<boolean>> {
+  const users = loadTable<User>('users', seedUsers);
+  const me = users.find(u => u.id === currentUserId);
+  if (!me || me.role !== 'admin') return fail('Only admins can invite admins.', 403);
+  if (isSupabaseEnabled) return sbInviteAdmin(email);
+  // Demo mode: just mark the email as pre-approved
   return success(true);
 }
 
