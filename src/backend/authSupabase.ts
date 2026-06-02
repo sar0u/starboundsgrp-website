@@ -7,7 +7,11 @@ import { supabase } from './supabase';
 import type { User, Role } from './models';
 import type { ApiResponse } from './api';
 
-const ADMIN_EMAILS = ['admin@starbound.com']; // anyone in this list gets admin role
+// Root admin(s). Any account created with one of these emails becomes admin
+// automatically. From the Admin Panel → Users tab, the root admin can then
+// promote/demote any other user without touching this list.
+const ADMIN_EMAILS = ['sarah.4univ@gmail.com'];
+const ADMIN_EMAILS = ['brianaedits110@gmail.com'];
 
 function ok<T>(data: T, status = 200): ApiResponse<T> { return { ok: true, data, status }; }
 function ko(error: string, status = 400): ApiResponse<never> { return { ok: false, error, status }; }
