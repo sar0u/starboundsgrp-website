@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogIn, Film, BookOpen, Music, MessageCircle, Home, Users, Shield, LogOut, Sparkles, Menu, X } from 'lucide-react';
+import { LogIn, Film, BookOpen, Music, MessageCircle, Home, Users, Shield, LogOut, Sparkles, Menu, X, UserCog } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 interface Props {
   currentPage: number;
   onNavigate: (p: number) => void;
   onLogin: () => void;
+  onProfile: () => void;
   isAdmin: boolean;
 }
 
@@ -19,7 +20,7 @@ const nav = [
   { label: 'Consulting',  icon: MessageCircle,  p: 5 },
 ];
 
-export default function Navbar({ currentPage, onNavigate, onLogin, isAdmin }: Props) {
+export default function Navbar({ currentPage, onNavigate, onLogin, onProfile, isAdmin }: Props) {
   const { user, logout } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -120,12 +121,27 @@ export default function Navbar({ currentPage, onNavigate, onLogin, isAdmin }: Pr
                           </div>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setUserMenuOpen(false); onProfile(); }}
+                        className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-ink-muted hover:bg-sun-pale hover:text-tangerine transition-colors"
+                      >
+                        <UserCog size={13} /> My Profile
+                      </button>
                       {isAdmin && (
-                        <button onClick={() => { setUserMenuOpen(false); onLogin(); }} className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-ink-muted hover:bg-sun-pale hover:text-tangerine transition-colors">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setUserMenuOpen(false); onLogin(); }}
+                          className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-ink-muted hover:bg-sun-pale hover:text-tangerine transition-colors"
+                        >
                           <Sparkles size={13} /> Admin Panel
                         </button>
                       )}
-                      <button onClick={() => { setUserMenuOpen(false); logout(); }} className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setUserMenuOpen(false); void logout(); }}
+                        className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-ash-light"
+                      >
                         <LogOut size={13} /> Sign Out
                       </button>
                     </motion.div>
