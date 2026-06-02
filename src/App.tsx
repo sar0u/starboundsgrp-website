@@ -5,6 +5,8 @@ import { AppProvider, useApp } from './context/AppContext';
 import SpaceCloud from './components/SpaceCloud';
 import Navbar from './components/Navbar';
 import AdminPanel from './components/AdminPanel';
+import ProfileModal from './components/ProfileModal';
+import RecoveryModal from './components/RecoveryModal';
 import Toast from './components/Toast';
 import HomePage from './pages/HomePage';
 import ScenepacksPage from './pages/ScenepacksPage';
@@ -36,6 +38,7 @@ function AppContent() {
   const [dir, setDir] = useState(0);
   const [showLogin, setShowLogin] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   const nav = useCallback((p: number) => {
     if (p === page) return;
@@ -107,7 +110,9 @@ function AppContent() {
     <div className="relative h-[100dvh] w-screen overflow-hidden scene-bg">
       <SpaceCloud />
       <Toast />
-      <Navbar currentPage={page} onNavigate={nav} onLogin={onLoginBtn} isAdmin={!!isAdmin} />
+      <Navbar currentPage={page} onNavigate={nav} onLogin={onLoginBtn} onProfile={() => setShowProfile(true)} isAdmin={!!isAdmin} />
+      <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
+      <RecoveryModal />
 
       {/* Admin FAB — only visible to admins, sits above the dots bar */}
       <AnimatePresence>
