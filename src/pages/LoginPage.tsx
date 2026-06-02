@@ -5,16 +5,26 @@ import { useApp, isSupabaseEnabled } from '../context/AppContext';
 import * as api from '../backend/api';
 
 export default function LoginPage({ onBack }: { onBack: () => void }) {
-  const { login, loginWithDiscord, register } = useApp();
+  const { login, loginWithDiscord, register, requestPasswordReset } = useApp();
   const [isReg, setIsReg] = useState(false);
   const [show, setShow] = useState(false);
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [name, setName] = useState('');
-  const [step, setStep] = useState<'form' | 'verify' | 'ok'>('form');
+  const [step, setStep] = useState<'form' | 'verify' | 'ok' | 'forgot' | 'forgot-sent'>('form');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState('');
+
+  const sendReset = async () => {
+    setErr('');
+    if (!email.trim()) { setErr('Enter your email first.'); return; }
+    setBusy(true);
+    const res = await requestPasswordReset(email);
+    setBusy(false);
+    if (res.ok) setStep('forgot-sent');
+    else setErr(res.error || 'Could not send reset email.');
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,7 +145,15 @@ export default function LoginPage({ onBack }: { onBack: () => void }) {
                 </button>
               </form>
 
-              <p className="text-center text-sm text-ink-muted mt-4">
+              {!isReg && (
+                <div className="text-center mt-3">
+                  <button type="button" onClick={() => setStep('forgot')} className="text-xs text-ink-muted hover:text-tangerine font-semibold">
+                    Forgot your password?
+                  </button>
+                </div>
+              )}
+
+              <p className="text-center text-sm text-ink-muted mt-3">
                 {isReg ? 'Already have an account?' : "Don't have an account?"}{' '}
                 <button onClick={() => { setIsReg(!isReg); setErr(''); }} className="text-tangerine font-bold hover:text-tangerine-dark">
                   {isReg ? 'Sign In' : 'Create one'}
@@ -183,6 +201,52 @@ export default function LoginPage({ onBack }: { onBack: () => void }) {
                   <button onClick={verify} className="w-full mt-3 py-3 rounded-xl btn-primary shadow-lg shadow-gold/25 font-bold active:scale-95 transition">Verify Account</button>
                 </>
               )}
+            </motion.div>
+          )}
+
+          {step === 'forgot' && (
+            <motion.div key="forgot" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+              className="glass rounded-2xl sm:rounded-3xl p-5 sm:p-7 shadow-2xl shadow-gold/10 border-2 border-gold-pale">
+              <button onClick={() => setStep('form')} className="flex items-center gap-2 text-ink-muted hover:text-tangerine transition mb-5 text-sm">
+                <ArrowLeft size={16} /> Back
+              </button>
+              <div className="text-center mb-5">
+                <div className="w-14 h-14 rounded-2xl btn-primary flex items-center justify-center mx-auto mb-3 shadow-lg shadow-gold/30">
+                  <Mail size={24} className="text-white" />
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-gradient mb-1">Reset Password</h2>
+                <p className="text-sm text-ink-muted">We'll send you a secure link by email.</p>
+              </div>
+              {err && (
+                <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-sm text-rose-600">
+                  <AlertCircle size={15} />{err}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-bold text-ink mb-1.5">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted" size={15} />
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className={inp} required />
+                </div>
+              </div>
+              <button onClick={sendReset} disabled={busy}
+                className="w-full mt-4 py-3 rounded-xl btn-primary shadow-lg shadow-gold/25 font-bold text-sm disabled:opacity-60">
+                {busy ? 'Sending…' : 'Send Reset Link'}
+              </button>
+            </motion.div>
+          )}
+
+          {step === 'forgot-sent' && (
+            <motion.div key="forgot-sent" initial={{ opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }}
+              className="glass rounded-2xl sm:rounded-3xl p-8 sm:p-10 text-center shadow-2xl border-2 border-green-200">
+              <CheckCircle size={56} className="text-green-500 mx-auto mb-3" />
+              <h2 className="text-xl sm:text-2xl font-extrabold text-ink mb-2">Check Your Inbox</h2>
+              <p className="text-ink-muted text-sm mb-1">We sent a reset link to</p>
+              <p className="text-ink font-bold text-sm break-all mb-5">{email}</p>
+              <p className="text-xs text-ink-muted mb-5">Click the link in the email to set a new password.</p>
+              <button onClick={() => setStep('form')} className="px-5 py-2.5 rounded-xl btn-secondary font-bold text-sm">
+                Back to Sign In
+              </button>
             </motion.div>
           )}
 
