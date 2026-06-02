@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Package, Music, BookOpen, Sparkles, Users as UsersIcon, Shield, ShieldOff } from 'lucide-react';
+import { X, Plus, Package, Music, BookOpen, Sparkles, Users as UsersIcon, Shield, ShieldOff, Mail } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { User } from '../backend/models';
 import FileUpload from './FileUpload';
@@ -130,11 +130,24 @@ function AudioForm({ onSubmit }: { onSubmit: (d: any) => void }) {
 
 /* ─── Users Manager — promote / demote members ─────────── */
 function UsersManager() {
-  const { listUsers, setUserRole, user: me } = useApp();
+  const { listUsers, setUserRole, user: me, inviteAdmin } = useApp();
   const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const sendInvite = async () => {
+    setInviteMsg(null);
+    if (!inviteEmail.includes('@')) { setInviteMsg({ type: 'err', text: 'Enter a valid email.' }); return; }
+    setInviting(true);
+    const res = await inviteAdmin(inviteEmail);
+    setInviting(false);
+    if (res.ok) { setInviteMsg({ type: 'ok', text: `Invitation sent to ${inviteEmail}` }); setInviteEmail(''); }
+    else { setInviteMsg({ type: 'err', text: res.error || 'Could not send invite.' }); }
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -163,6 +176,33 @@ function UsersManager() {
       <div>
         <h3 className="text-lg font-extrabold text-ink mb-1">Manage Members</h3>
         <p className="text-sm text-ink-muted">Promote community members to admin or demote existing admins.</p>
+      </div>
+
+      {/* Invite Admin */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-sun-pale to-cream-warm border border-gold-pale">
+        <div className="flex items-center gap-2 mb-2">
+          <Mail size={14} className="text-tangerine" />
+          <span className="font-bold text-ink text-sm">Invite a new admin</span>
+        </div>
+        <p className="text-xs text-ink-muted mb-3">
+          We'll email them a magic sign-up link. When they accept, they automatically join as <span className="font-bold text-tangerine-dark">admin</span>.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
+            placeholder="new-admin@example.com"
+            className="flex-1 min-w-0 px-4 py-2.5 rounded-xl bg-white border border-ash focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 transition-all text-sm"
+          />
+          <button onClick={sendInvite} disabled={inviting}
+            className="px-4 py-2.5 rounded-xl btn-primary text-sm font-bold shadow shrink-0 disabled:opacity-60">
+            {inviting ? 'Sending…' : 'Send Invite'}
+          </button>
+        </div>
+        {inviteMsg && (
+          <div className={`mt-2 text-xs ${inviteMsg.type === 'ok' ? 'text-emerald-700' : 'text-rose-600'} font-semibold`}>
+            {inviteMsg.text}
+          </div>
+        )}
       </div>
 
       <input
