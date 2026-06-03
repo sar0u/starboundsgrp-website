@@ -1,23 +1,33 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, MessageCircle, Star, CheckCircle, ArrowRight, User, Mail, FileText } from 'lucide-react';
+import { Calendar, Clock, Star, CheckCircle, ArrowRight, User, Mail, MessageCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
-const consultants = [
-  { id: 'c1', name: 'James Davidson', role: 'Senior Colorist', rating: 4.9, reviews: 127, specialties: ['Color Grading', 'LUT Design', 'HDR'], avail: 'Mon, Wed, Fri', price: '$120/hr', init: 'JD' },
-  { id: 'c2', name: 'Amber Brooks', role: 'Motion Designer', rating: 4.8, reviews: 94, specialties: ['Motion Graphics', 'Typography', 'AE'], avail: 'Tue, Thu, Sat', price: '$100/hr', init: 'AB' },
-  { id: 'c3', name: 'Marcus Chen', role: 'Sound Engineer', rating: 5.0, reviews: 68, specialties: ['Sound Design', 'Mixing', 'Foley'], avail: 'Daily', price: '$90/hr', init: 'MC' },
-];
+// Real consultants & services will be added in the future.
+// Until then the page shows a clean empty state.
+interface Consultant {
+  id: string;
+  name: string;
+  role: string;
+  rating: number;
+  reviews: number;
+  specialties: string[];
+  avail: string;
+  price: string;
+  init: string;
+}
+interface Service {
+  icon: typeof MessageCircle;
+  title: string;
+  desc: string;
+}
 
-const services = [
-  { icon: MessageCircle, title: '1-on-1 Mentoring', desc: 'Personal guidance tailored to your goals' },
-  { icon: FileText,      title: 'Project Review',   desc: 'Detailed feedback with actionable improvements' },
-  { icon: Calendar,      title: 'Workflow Audit',   desc: 'Optimize your pipeline for max efficiency' },
-];
+const consultants: Consultant[] = [];
+const services: Service[] = [];
 
 export default function ConsultingPage() {
   const { notify, user } = useApp();
-  const [sel, setSel] = useState<typeof consultants[0] | null>(null);
+  const [sel, setSel] = useState<Consultant | null>(null);
   const [step, setStep] = useState<'list' | 'form' | 'done'>('list');
   const [form, setForm] = useState({ name: '', email: '', message: '' });
 
@@ -38,46 +48,63 @@ export default function ConsultingPage() {
 
         {step === 'list' && (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
-              {services.map((s, i) => {
-                const Icon = s.icon;
-                return (
-                  <motion.div key={s.title} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .1 + i * .07 }}
-                    whileHover={{ y: -3 }} className="glass rounded-2xl p-5">
-                    <div className="w-12 h-12 rounded-xl btn-primary flex items-center justify-center mb-3 shadow"><Icon size={22} className="text-white" /></div>
-                    <h3 className="font-bold text-ink mb-1">{s.title}</h3>
-                    <p className="text-sm text-ink-muted">{s.desc}</p>
-                  </motion.div>
-                );
-              })}
-            </div>
+            {services.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
+                {services.map((s, i) => {
+                  const Icon = s.icon;
+                  return (
+                    <motion.div key={s.title} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .1 + i * .07 }}
+                      whileHover={{ y: -3 }} className="glass rounded-2xl p-5">
+                      <div className="w-12 h-12 rounded-xl btn-primary flex items-center justify-center mb-3 shadow"><Icon size={22} className="text-white" /></div>
+                      <h3 className="font-bold text-ink mb-1">{s.title}</h3>
+                      <p className="text-sm text-ink-muted">{s.desc}</p>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
 
-            <h3 className="text-lg sm:text-xl font-extrabold text-ink mb-4">Our Experts</h3>
-            <div className="space-y-3 sm:space-y-4">
-              {consultants.map((c, i) => (
-                <motion.div key={c.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .15 + i * .07 }}
-                  className="glass rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl btn-primary flex items-center justify-center text-white text-lg sm:text-xl font-extrabold flex-shrink-0 shadow-lg">{c.init}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
-                      <h4 className="font-bold text-ink text-base sm:text-lg">{c.name}</h4>
-                      <div className="flex items-center gap-1 text-sm text-sun"><Star size={13} className="fill-sun" />{c.rating}</div>
-                      <span className="text-xs text-ink-muted">({c.reviews} reviews)</span>
-                    </div>
-                    <p className="text-sm text-tangerine font-bold mb-2">{c.role}</p>
-                    <div className="flex flex-wrap gap-1.5 mb-2">{c.specialties.map(s => <span key={s} className="tag">{s}</span>)}</div>
-                    <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-ink-muted flex-wrap">
-                      <span className="flex items-center gap-1"><Calendar size={13} />{c.avail}</span>
-                      <span className="flex items-center gap-1"><Clock size={13} />{c.price}</span>
-                    </div>
-                  </div>
-                  <button onClick={() => { setSel(c); setStep('form'); }}
-                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl btn-primary shadow-lg shadow-gold/20 flex items-center justify-center gap-2 text-sm active:scale-95 transition">
-                    Book Session <ArrowRight size={15} />
-                  </button>
-                </motion.div>
-              ))}
-            </div>
+            {consultants.length > 0 ? (
+              <>
+                <h3 className="text-lg sm:text-xl font-extrabold text-ink mb-4">Our Experts</h3>
+                <div className="space-y-3 sm:space-y-4">
+                  {consultants.map((c, i) => (
+                    <motion.div key={c.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .15 + i * .07 }}
+                      className="glass rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl btn-primary flex items-center justify-center text-white text-lg sm:text-xl font-extrabold flex-shrink-0 shadow-lg">{c.init}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
+                          <h4 className="font-bold text-ink text-base sm:text-lg">{c.name}</h4>
+                          <div className="flex items-center gap-1 text-sm text-sun"><Star size={13} className="fill-sun" />{c.rating}</div>
+                          <span className="text-xs text-ink-muted">({c.reviews} reviews)</span>
+                        </div>
+                        <p className="text-sm text-tangerine font-bold mb-2">{c.role}</p>
+                        <div className="flex flex-wrap gap-1.5 mb-2">{c.specialties.map(s => <span key={s} className="tag">{s}</span>)}</div>
+                        <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-ink-muted flex-wrap">
+                          <span className="flex items-center gap-1"><Calendar size={13} />{c.avail}</span>
+                          <span className="flex items-center gap-1"><Clock size={13} />{c.price}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => { setSel(c); setStep('form'); }}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl btn-primary shadow-lg shadow-gold/20 flex items-center justify-center gap-2 text-sm active:scale-95 transition">
+                        Book Session <ArrowRight size={15} />
+                      </button>
+                    </motion.div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .15 }}
+                className="text-center py-16 sm:py-20">
+                <div className="w-16 h-16 rounded-2xl bg-sun-pale border-2 border-dashed border-gold-pale flex items-center justify-center mx-auto mb-4">
+                  <MessageCircle size={26} className="text-gold opacity-60" />
+                </div>
+                <p className="text-ink font-bold mb-1">Consulting is on its way</p>
+                <p className="text-sm text-ink-muted max-w-sm mx-auto">
+                  Verified industry experts will soon be available here for 1-on-1 sessions, project reviews and workflow audits.
+                </p>
+              </motion.div>
+            )}
           </>
         )}
 
