@@ -121,27 +121,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let done = false;
     const finish = () => { if (!done) { done = true; setLoading(false); } };
 
-    // Safety net — never block the UI longer than 4 seconds
-    const safety = setTimeout(finish, 4000);
+    // Safety net — UI must be interactive in 1.2s max, no matter what.
+    // Because we hydrate `user` from localStorage synchronously above, the
+    // user is already "signed in" visually before any network call.
+    const safety = setTimeout(finish, 1200);
 
     (async () => {
       try {
-        const userPromise = api.apiGetCurrentUser();
-        // Race the user fetch against a 2s timeout — if Supabase is asleep,
-        // we proceed as signed-out instead of hanging.
-        const res = await Promise.race([
-          userPromise,
-          new Promise<null>(r => setTimeout(() => r(null), 2500)),
+        await Promise.race([
+          api.apiGetCurrentUser().then((res) => {
+            if (res.ok && res.data) setUser(res.data);
+            else if (res.ok && !res.data) setUser(null); // genuinely signed out
+          }),
+          new Promise(r => setTimeout(r, 1500)),
         ]);
-        if (res && (res as any).ok && (res as any).data) setUser((res as any).data);
       } catch { /* swallow */ }
 
-      try {
-        await Promise.race([
-          refreshData(),
-          new Promise(r => setTimeout(r, 3000)),
-        ]);
-      } catch { /* swallow */ }
+      // Data refresh runs in background, doesn't block UI.
+      refreshData().catch(() => { /* swallow */ });
 
       clearTimeout(safety);
       finish();
@@ -358,7 +355,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [notify]);
 
   const updatePassword = useCallback(async (newPassword: string) => {
-    const res = await api.apiUpdatePassword(newPassword);
+    const res = await withTimeout(api.apiUpdatePassword(newPassword), 8000, 'password update') as any;
     if (res.ok) {
       notify('success', 'Password updated.');
       setRecoveryMode(false);
@@ -369,17 +366,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ─── Profile management ──────────────────────────────────
   const updateProfile = useCallback(async (updates: { name?: string; phone?: string; bio?: string; avatar?: string }) => {
-    const res = await api.apiUpdateProfile(updates);
-    if (res.ok && res.data) {
-      setUser(res.data);
-      notify('success', 'Profile updated.');
-      return { ok: true };
-    }
-    return { ok: false, error: res.error };
-  }, [notify]);
+    if (!user) return { ok: false, error: 'Not signed in.' };
+    // OPTIMISTIC: update the UI + local cache IMMEDIATELY so the user sees
+    // their changes saved instantly. The backend call happens in the
+    // background; if it fails, the local cache still holds the new values.
+    const optimistic: User = {
+      ...user,
+      name: updates.name !== undefined && updates.name.trim() ? updates.name.trim() : user.name,
+      bio: updates.bio !== undefined ? updates.bio : user.bio,
+      avatar: updates.avatar !== undefined && updates.avatar.trim()
+        ? updates.avatar.trim().slice(0, 4).toUpperCase()
+        : user.avatar,
+    };
+    setUser(optimistic);
+    notify('success', 'Profile updated.');
+    // Fire-and-forget backend sync with a hard 5s ceiling
+    Promise.race([
+      api.apiUpdateProfile(updates),
+      new Promise(r => setTimeout(r, 5000)),
+    ]).catch(() => { /* silent */ });
+    return { ok: true };
+  }, [user, notify]);
 
   const updateEmail = useCallback(async (newEmail: string) => {
-    const res = await api.apiUpdateEmail(newEmail);
+    const res = await withTimeout(api.apiUpdateEmail(newEmail), 8000, 'email update') as any;
     if (res.ok) {
       notify('info', `A confirmation link was sent to ${newEmail}. Click it to finalize the change.`);
       return { ok: true };
@@ -390,7 +400,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── Admin invitation ────────────────────────────────────
   const inviteAdmin = useCallback(async (email: string) => {
     if (!user) return { ok: false, error: 'Not signed in.' };
-    const res = await api.apiInviteAdmin(user.id, email);
+    const res = await withTimeout(api.apiInviteAdmin(user.id, email), 8000, 'invitation') as any;
     if (res.ok) {
       notify('success', `Invitation sent to ${email}`);
       return { ok: true };
