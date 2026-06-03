@@ -122,11 +122,22 @@ select option { background: #FFFFFF; color: var(--color-ink); }
 @keyframes pop-in    { 0% { transform: scale(0); opacity:0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); opacity:1; } }
 @keyframes glow-ring { 0%,100% { box-shadow: 0 0 18px rgba(255,122,0,.16), 0 0 50px rgba(255,176,32,.08); } 50% { box-shadow: 0 0 28px rgba(255,122,0,.30), 0 0 70px rgba(255,176,32,.14); } }
 
-.animate-float      { animation: float 7s ease-in-out infinite; }
-.animate-drift      { animation: drift 22s ease-in-out infinite; }
+.animate-float      { animation: float 7s ease-in-out infinite; will-change: transform; }
+.animate-drift      { animation: drift 22s ease-in-out infinite; will-change: transform; }
 .animate-glow       { animation: glow 4s ease-in-out infinite; }
 .animate-pop-in     { animation: pop-in .5s cubic-bezier(.34,1.56,.64,1); }
 .animate-glow-ring  { animation: glow-ring 3.5s ease-in-out infinite; }
+
+/* Honour user motion preference — completely kill heavy loops */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float, .animate-drift, .animate-glow, .animate-glow-ring {
+    animation: none !important;
+  }
+  * {
+    transition-duration: .05s !important;
+    animation-duration: .01ms !important;
+  }
+}
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
