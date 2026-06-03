@@ -5,6 +5,25 @@
 // ============================================================
 
 const DB_PREFIX = 'sgrp_db_';
+const SCHEMA_KEY = 'sgrp_schema_version';
+const CURRENT_SCHEMA = 2; // bump to wipe stale demo seed data from visitors' caches
+
+// Run once per browser per schema version: clears any cached demo content
+// from older builds so visitors see the real empty state.
+(function migrate() {
+  try {
+    const v = parseInt(localStorage.getItem(SCHEMA_KEY) || '0', 10);
+    if (v < CURRENT_SCHEMA) {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k?.startsWith(DB_PREFIX)) toRemove.push(k);
+      }
+      toRemove.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem(SCHEMA_KEY, String(CURRENT_SCHEMA));
+    }
+  } catch { /* ignore */ }
+})();
 
 export function loadTable<T>(tableName: string, defaults: T[]): T[] {
   try {
