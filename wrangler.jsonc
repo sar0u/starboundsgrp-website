@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/wrangler/config-schema.json",
-  "name": "starboundsgrp-website",
+  "name": "starboundsgrp",
   "compatibility_date": "2025-01-01",
   "assets": {
     "directory": "./dist",
