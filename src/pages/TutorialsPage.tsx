@@ -117,14 +117,28 @@ export default function TutorialsPage() {
         </div>
 
         {list.length === 0 && (
-          <div className="text-center py-16 text-ink-muted">No tutorials match your filters.</div>
+          <div className="text-center py-16 sm:py-20">
+            <div className="w-16 h-16 rounded-2xl bg-sun-pale border-2 border-dashed border-gold-pale flex items-center justify-center mx-auto mb-4">
+              <BookOpen size={26} className="text-gold opacity-60" />
+            </div>
+            <p className="text-ink font-bold mb-1">
+              {tutorials.length === 0 ? 'No tutorials yet' : 'No matching tutorials'}
+            </p>
+            <p className="text-sm text-ink-muted max-w-xs mx-auto">
+              {tutorials.length === 0
+                ? 'Step-by-step guides from our experts will appear here soon.'
+                : 'Try a different search, category or level.'}
+            </p>
+          </div>
         )}
 
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .35 }} className="flex justify-center mt-8">
-          <button className="flex items-center gap-2 px-6 sm:px-8 py-3.5 rounded-2xl btn-secondary text-sm sm:text-base active:scale-95 transition">
-            <BookOpen size={18} /> Explore More Tutorials <ArrowRight size={16} />
-          </button>
-        </motion.div>
+        {tutorials.length > 6 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .35 }} className="flex justify-center mt-8">
+            <button className="flex items-center gap-2 px-6 sm:px-8 py-3.5 rounded-2xl btn-secondary text-sm sm:text-base active:scale-95 transition">
+              <BookOpen size={18} /> Explore More Tutorials <ArrowRight size={16} />
+            </button>
+          </motion.div>
+        )}
       </div>
     </div>
   );
