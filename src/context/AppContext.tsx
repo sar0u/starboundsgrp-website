@@ -78,29 +78,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ─── Load all data ──────────────────────────────────────────
+  // Each fetch is isolated with allSettled so one failure doesn't kill the rest.
   const refreshData = useCallback(async () => {
-    const [sp, tu, au, ro, st] = await Promise.all([
-      api.apiGetScenepacks(),
-      api.apiGetTutorials(),
-      api.apiGetAudioTracks(),
-      api.apiGetRooms(),
-      api.apiGetStats(),
+    const safe = <T,>(p: Promise<T>) =>
+      Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))])
+        .catch(() => ({ ok: false } as any));
+
+    const [sp, tu, au, ro, st] = await Promise.allSettled([
+      safe(api.apiGetScenepacks()),
+      safe(api.apiGetTutorials()),
+      safe(api.apiGetAudioTracks()),
+      safe(api.apiGetRooms()),
+      safe(api.apiGetStats()),
     ]);
-    if (sp.ok && sp.data) setScenepacks(sp.data);
-    if (tu.ok && tu.data) setTutorials(tu.data);
-    if (au.ok && au.data) setAudioTracks(au.data);
-    if (ro.ok && ro.data) setChatRooms(ro.data);
-    if (st.ok && st.data) setStats(st.data);
+    if (sp.status === 'fulfilled' && (sp.value as any).ok && (sp.value as any).data) setScenepacks((sp.value as any).data);
+    if (tu.status === 'fulfilled' && (tu.value as any).ok && (tu.value as any).data) setTutorials((tu.value as any).data);
+    if (au.status === 'fulfilled' && (au.value as any).ok && (au.value as any).data) setAudioTracks((au.value as any).data);
+    if (ro.status === 'fulfilled' && (ro.value as any).ok && (ro.value as any).data) setChatRooms((ro.value as any).data);
+    if (st.status === 'fulfilled' && (st.value as any).ok && (st.value as any).data) setStats((st.value as any).data);
   }, []);
 
   // ─── Init: restore session ─────────────────────────────────
+  // Hard timeout: no matter what, the app becomes interactive in <= 4s.
+  // This prevents the dreaded "stuck on Loading…" screen if Supabase is slow,
+  // paused (free tier), unreachable, or returns malformed data.
   useEffect(() => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; setLoading(false); } };
+
+    // Safety net — never block the UI longer than 4 seconds
+    const safety = setTimeout(finish, 4000);
+
     (async () => {
-      const res = await api.apiGetCurrentUser();
-      if (res.ok && res.data) setUser(res.data);
-      await refreshData();
-      setLoading(false);
+      try {
+        const userPromise = api.apiGetCurrentUser();
+        // Race the user fetch against a 2s timeout — if Supabase is asleep,
+        // we proceed as signed-out instead of hanging.
+        const res = await Promise.race([
+          userPromise,
+          new Promise<null>(r => setTimeout(() => r(null), 2500)),
+        ]);
+        if (res && (res as any).ok && (res as any).data) setUser((res as any).data);
+      } catch { /* swallow */ }
+
+      try {
+        await Promise.race([
+          refreshData(),
+          new Promise(r => setTimeout(r, 3000)),
+        ]);
+      } catch { /* swallow */ }
+
+      clearTimeout(safety);
+      finish();
     })();
+
+    return () => clearTimeout(safety);
   }, [refreshData]);
 
   // ─── Supabase auth listener (for OAuth redirects & email confirmation) ─
@@ -133,8 +165,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   // ─── Auth ───────────────────────────────────────────────────
+  // Wrap any auth call so it can never hang forever
+  const withTimeout = async <T,>(p: Promise<T>, ms = 12000, label = 'request'): Promise<T | { ok: false; error: string }> => {
+    let to: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<{ ok: false; error: string }>((resolve) => {
+      to = setTimeout(() => resolve({ ok: false, error: `The ${label} took too long. Please try again.` }), ms);
+    });
+    try {
+      const result = await Promise.race([p, timeout]);
+      clearTimeout(to!);
+      return result as T;
+    } catch (e: any) {
+      clearTimeout(to!);
+      return { ok: false, error: e?.message || `Network error during ${label}.` };
+    }
+  };
+
   const login = useCallback(async (email: string, password: string) => {
-    const res = await api.apiLogin(email, password);
+    const res = await withTimeout(api.apiLogin(email, password), 12000, 'sign-in') as any;
     if (res.ok && res.data) {
       setUser(res.data.user);
       notify('success', `Welcome back, ${res.data.user.name}!`);
@@ -145,7 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [notify, refreshData]);
 
   const loginWithDiscord = useCallback(async () => {
-    const res = await api.apiLoginWithDiscord();
+    const res = await withTimeout(api.apiLoginWithDiscord(), 10000, 'Discord sign-in') as any;
     if (!res.ok) return { ok: false, error: res.error };
     // Supabase path: browser will redirect to Discord, then back. The auth
     // listener (above) will pick up the session and set the user.
@@ -160,7 +208,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [notify, refreshData]);
 
   const register = useCallback(async (name: string, email: string, password: string, role: 'admin' | 'user') => {
-    const res = await api.apiRegister(name, email, password, role);
+    const res = await withTimeout(api.apiRegister(name, email, password, role), 12000, 'sign-up') as any;
     if (!res.ok) return { ok: false, error: res.error };
     // Real backend: account exists but needs email confirmation before sign-in
     if (res.data?.needsVerification) {
@@ -289,7 +337,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ─── Password reset ───────────────────────────────────────
   const requestPasswordReset = useCallback(async (email: string) => {
-    const res = await api.apiRequestPasswordReset(email);
+    const res = await withTimeout(api.apiRequestPasswordReset(email), 10000, 'reset request') as any;
     if (res.ok) notify('success', 'Password reset email sent. Check your inbox!');
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }, [notify]);
