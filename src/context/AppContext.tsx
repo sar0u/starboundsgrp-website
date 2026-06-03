@@ -58,7 +58,22 @@ type AppCtx = AppState & AppActions;
 const Ctx = createContext<AppCtx | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  // Hydrate user from localStorage on first paint so the UI is interactive
+  // INSTANTLY, even if Supabase is slow or down. The real session check
+  // happens in the background and will replace this if needed.
+  const [user, setUserState] = useState<User | null>(() => {
+    try {
+      const cached = localStorage.getItem('sgrp_cached_user');
+      return cached ? JSON.parse(cached) : null;
+    } catch { return null; }
+  });
+  const setUser = (u: User | null) => {
+    setUserState(u);
+    try {
+      if (u) localStorage.setItem('sgrp_cached_user', JSON.stringify(u));
+      else localStorage.removeItem('sgrp_cached_user');
+    } catch { /* quota / private mode */ }
+  };
   const [loading, setLoading] = useState(true);
   const [scenepacks, setScenepacks] = useState<Scenepack[]>([]);
   const [tutorials, setTutorials] = useState<Tutorial[]>([]);
