@@ -8,6 +8,7 @@ import AdminPanel from './components/AdminPanel';
 import ProfileModal from './components/ProfileModal';
 import RecoveryModal from './components/RecoveryModal';
 import Toast from './components/Toast';
+import LoadingScreen from './components/LoadingScreen';
 import HomePage from './pages/HomePage';
 import ScenepacksPage from './pages/ScenepacksPage';
 import TutorialsPage from './pages/TutorialsPage';
@@ -91,16 +92,7 @@ function AppContent() {
     return () => { removeEventListener('touchstart', ts); removeEventListener('touchend', te); };
   }, [next, prev]);
 
-  if (loading) return (
-    <div className="h-[100dvh] w-screen flex items-center justify-center scene-bg">
-      <motion.div initial={{ opacity: 0, scale: .8 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
-        <div className="w-16 h-16 rounded-2xl btn-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-gold/30 animate-glow-ring">
-          <span className="text-white font-extrabold text-2xl">S</span>
-        </div>
-        <p className="text-ink-muted font-semibold">Loading starboundsgrp…</p>
-      </motion.div>
-    </div>
-  );
+  if (loading) return <LoadingScreen />;
 
   const Comp = pages[page].component;
   const canPrev = page > 0;
