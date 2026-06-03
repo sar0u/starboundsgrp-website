@@ -36,7 +36,7 @@ export default function SpaceCloud() {
 
     // Far fewer blobs on smaller screens
     const w = innerWidth;
-    const count = w < 640 ? 18 : w < 1024 ? 28 : 38;
+    const count = w < 640 ? 10 : w < 1024 ? 20 : 28;
 
     const colors = ['#FFC107','#FFB020','#FF9A1F','#FFD970','#FF7A00','#FFE082'];
     const blobs = Array.from({ length: count }, () => ({
