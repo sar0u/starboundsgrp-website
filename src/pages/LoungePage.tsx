@@ -19,10 +19,11 @@ export default function LoungePage() {
 
   const pickRoom = (id: string) => { setActiveRoom(id); setRoomsOpen(false); };
   const room = chatRooms.find(r => r.id === activeRoom);
-  const online = [
-    { name: 'AlexEditor', i: 'AE' }, { name: 'MayaCuts', i: 'MC' }, { name: 'SarahEdits', i: 'SE' },
-    { name: 'TomVisuals', i: 'TV' }, { name: 'NinaFrame', i: 'NF' }, { name: 'ChrisCut', i: 'CC' },
-  ];
+  // Online users — populated by Supabase Realtime in the future.
+  // For now we show the signed-in user only (no fake placeholders).
+  const online: { name: string; i: string }[] = user
+    ? [{ name: user.name, i: user.avatar }]
+    : [];
 
   return (
     <div
@@ -116,7 +117,15 @@ export default function LoungePage() {
               </motion.div>
             ))}
           </AnimatePresence>
-          {chatMessages.length === 0 && <div className="text-center text-ink-muted py-12">No messages yet. Start the conversation!</div>}
+          {chatMessages.length === 0 && (
+            <div className="text-center py-12 sm:py-16">
+              <div className="w-14 h-14 rounded-2xl bg-sun-pale border-2 border-dashed border-gold-pale flex items-center justify-center mx-auto mb-3">
+                <MessageSquare size={22} className="text-gold opacity-60" />
+              </div>
+              <p className="text-ink font-bold mb-1">It's quiet in here</p>
+              <p className="text-sm text-ink-muted">{user ? 'Be the first to say something!' : 'Sign in to start the conversation.'}</p>
+            </div>
+          )}
         </div>
 
         {/* Input */}
@@ -142,15 +151,19 @@ export default function LoungePage() {
         className="hidden xl:flex flex-col w-52 glass rounded-2xl p-4 overflow-hidden shrink-0">
         <div className="flex items-center gap-2 mb-4 px-1"><Users size={16} className="text-tangerine" /><span className="font-bold text-ink">Online</span><span className="ml-auto text-xs text-ink-muted">{online.length}</span></div>
         <div className="flex-1 overflow-y-auto scrollbar-hide space-y-1">
-          {online.map(u => (
-            <div key={u.name} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-sun-pale transition cursor-pointer">
-              <div className="relative shrink-0">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sun to-gold flex items-center justify-center text-white text-[11px] font-bold">{u.i}</div>
-                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+          {online.length === 0 ? (
+            <p className="text-xs text-ink-muted px-2 py-3">No one online right now.</p>
+          ) : (
+            online.map(u => (
+              <div key={u.name} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-sun-pale transition">
+                <div className="relative shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sun to-gold flex items-center justify-center text-white text-[11px] font-bold">{u.i}</div>
+                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+                </div>
+                <span className="text-sm text-ink-muted truncate">{u.name}</span>
               </div>
-              <span className="text-sm text-ink-muted truncate">{u.name}</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </motion.aside>
     </div>
