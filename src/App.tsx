@@ -9,7 +9,6 @@ import ProfileModal from './components/ProfileModal';
 import RecoveryModal from './components/RecoveryModal';
 import Toast from './components/Toast';
 import LoadingScreen from './components/LoadingScreen';
-import BackendStatus from './components/BackendStatus';
 import HomePage from './pages/HomePage';
 import ScenepacksPage from './pages/ScenepacksPage';
 import TutorialsPage from './pages/TutorialsPage';
@@ -102,7 +101,6 @@ function AppContent() {
   return (
     <div className="relative h-[100dvh] w-screen overflow-hidden scene-bg">
       <SpaceCloud />
-      <BackendStatus />
       <Toast />
       <Navbar currentPage={page} onNavigate={nav} onLogin={onLoginBtn} onProfile={() => setShowProfile(true)} isAdmin={!!isAdmin} />
       <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
