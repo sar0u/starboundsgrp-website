@@ -111,8 +111,18 @@ export default function ScenepacksPage() {
         </div>
 
         {list.length === 0 && (
-          <div className="text-center py-16 text-ink-muted">
-            No scenepacks found. Try a different search or category.
+          <div className="text-center py-16 sm:py-20">
+            <div className="w-16 h-16 rounded-2xl bg-sun-pale border-2 border-dashed border-gold-pale flex items-center justify-center mx-auto mb-4">
+              <Play size={26} className="text-gold opacity-60" />
+            </div>
+            <p className="text-ink font-bold mb-1">
+              {scenepacks.length === 0 ? 'No scenepacks yet' : 'No matching scenepacks'}
+            </p>
+            <p className="text-sm text-ink-muted max-w-xs mx-auto">
+              {scenepacks.length === 0
+                ? 'Admins will publish premium footage collections here soon.'
+                : 'Try a different search or category.'}
+            </p>
           </div>
         )}
 
