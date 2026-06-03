@@ -194,7 +194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await withTimeout(api.apiLogin(email, password), 12000, 'sign-in') as any;
+    const res = await withTimeout(api.apiLogin(email, password), 30000, 'sign-in') as any;
     if (res.ok && res.data) {
       setUser(res.data.user);
       notify('success', `Welcome back, ${res.data.user.name}!`);
@@ -205,7 +205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [notify, refreshData]);
 
   const loginWithDiscord = useCallback(async () => {
-    const res = await withTimeout(api.apiLoginWithDiscord(), 10000, 'Discord sign-in') as any;
+    const res = await withTimeout(api.apiLoginWithDiscord(), 25000, 'Discord sign-in') as any;
     if (!res.ok) return { ok: false, error: res.error };
     // Supabase path: browser will redirect to Discord, then back. The auth
     // listener (above) will pick up the session and set the user.
@@ -220,7 +220,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [notify, refreshData]);
 
   const register = useCallback(async (name: string, email: string, password: string, role: 'admin' | 'user') => {
-    const res = await withTimeout(api.apiRegister(name, email, password, role), 12000, 'sign-up') as any;
+    const res = await withTimeout(api.apiRegister(name, email, password, role), 30000, 'sign-up') as any;
     if (!res.ok) return { ok: false, error: res.error };
     // Real backend: account exists but needs email confirmation before sign-in
     if (res.data?.needsVerification) {
@@ -367,9 +367,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── Profile management ──────────────────────────────────
   const updateProfile = useCallback(async (updates: { name?: string; phone?: string; bio?: string; avatar?: string }) => {
     if (!user) return { ok: false, error: 'Not signed in.' };
-    // OPTIMISTIC: update the UI + local cache IMMEDIATELY so the user sees
-    // their changes saved instantly. The backend call happens in the
-    // background; if it fails, the local cache still holds the new values.
+
+    // OPTIMISTIC UI: show the change instantly so the form feels responsive.
+    const previous = user;
     const optimistic: User = {
       ...user,
       name: updates.name !== undefined && updates.name.trim() ? updates.name.trim() : user.name,
@@ -379,13 +379,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : user.avatar,
     };
     setUser(optimistic);
-    notify('success', 'Profile updated.');
-    // Fire-and-forget backend sync with a hard 5s ceiling
-    Promise.race([
-      api.apiUpdateProfile(updates),
-      new Promise(r => setTimeout(r, 5000)),
-    ]).catch(() => { /* silent */ });
-    return { ok: true };
+
+    // ACTUALLY persist to Supabase — wait up to 15s for confirmation.
+    const res = await withTimeout(api.apiUpdateProfile(updates), 15000, 'profile save') as any;
+
+    if (res.ok && res.data) {
+      // Backend confirmed → use its authoritative copy (in case it sanitised anything).
+      setUser(res.data);
+      notify('success', 'Profile saved!');
+      return { ok: true };
+    } else {
+      // Backend failed → roll back so the user sees their real saved state.
+      setUser(previous);
+      notify('error', res.error || 'Could not save. Please try again.');
+      return { ok: false, error: res.error || 'Save failed.' };
+    }
   }, [user, notify]);
 
   const updateEmail = useCallback(async (newEmail: string) => {
