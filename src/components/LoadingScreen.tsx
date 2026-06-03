@@ -8,7 +8,7 @@ export default function LoadingScreen() {
   useEffect(() => {
     // After 3 seconds, surface a "Reload" escape hatch so the user is never
     // locked out if the network is slow or Supabase is down.
-    const t = setTimeout(() => setShowRetry(true), 3000);
+    const t = setTimeout(() => setShowRetry(true), 2000);
     return () => clearTimeout(t);
   }, []);
 
