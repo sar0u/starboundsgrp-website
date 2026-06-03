@@ -169,16 +169,15 @@ export async function sbUpdatePassword(newPassword: string): Promise<ApiResponse
 export async function sbUpdateProfile(updates: { name?: string; phone?: string; bio?: string; avatar?: string }): Promise<ApiResponse<User>> {
   if (!supabase) return ko('Supabase not configured.', 500);
   const data: Record<string, any> = {};
-  if (updates.name !== undefined) data.name = updates.name.trim();
-  if (updates.phone !== undefined) data.phone = updates.phone.trim();
-  if (updates.bio !== undefined) data.bio = updates.bio.trim();
+  if (updates.name !== undefined)   data.name   = updates.name.trim();
+  if (updates.phone !== undefined)  data.phone  = updates.phone.trim();
+  if (updates.bio !== undefined)    data.bio    = updates.bio.trim();
   if (updates.avatar !== undefined) data.avatar = updates.avatar.trim().slice(0, 4).toUpperCase();
-  const payload: any = { data };
-  if (updates.phone !== undefined && updates.phone.trim()) {
-    // Supabase stores phone separately too; safe to set
-    payload.phone = updates.phone.trim();
-  }
-  const { data: res, error } = await supabase.auth.updateUser(payload);
+
+  // We only store everything in user_metadata (the `data` field).
+  // Do NOT pass `phone` at the top level — Supabase requires an SMS provider
+  // for that and would reject the whole update.
+  const { data: res, error } = await supabase.auth.updateUser({ data });
   if (error) return ko(translateError(error.message), 400);
   if (!res.user) return ko('Update failed.', 500);
   return ok(buildUser(res.user));
