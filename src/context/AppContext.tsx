@@ -50,6 +50,15 @@ interface AppActions {
   updateEmail: (newEmail: string) => Promise<{ ok: boolean; error?: string }>;
   inviteAdmin: (email: string) => Promise<{ ok: boolean; error?: string }>;
   clearRecoveryMode: () => void;
+  // Ping an Editor
+  helpRequests: import('../backend/models').HelpRequest[];
+  loadHelpRequests: () => Promise<void>;
+  createHelpRequest: (data: { title: string; description: string; category: import('../backend/models').HelpCategory; urgency: import('../backend/models').HelpUrgency }) => Promise<{ ok: boolean; error?: string }>;
+  claimHelpRequest: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  unclaimHelpRequest: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  resolveHelpRequest: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  replyToHelpRequest: (id: string, content: string) => Promise<{ ok: boolean; error?: string }>;
+  deleteHelpRequest: (id: string) => Promise<{ ok: boolean; error?: string }>;
   isAdmin: boolean;
 }
 
@@ -80,6 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [helpRequests, setHelpRequests] = useState<import('../backend/models').HelpRequest[]>([]);
   const [likedItems, setLikedItems] = useState<Set<string>>(new Set());
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState({ scenepacks: 0, tutorials: 0, audio: 0, users: 0 });
@@ -418,6 +428,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const clearRecoveryMode = useCallback(() => setRecoveryMode(false), []);
 
+  // ─── Ping an Editor ──────────────────────────────────────
+  const loadHelpRequests = useCallback(async () => {
+    const res = await api.apiGetHelpRequests();
+    if (res.ok && res.data) setHelpRequests(res.data);
+  }, []);
+
+  const createHelpRequest = useCallback(async (data: { title: string; description: string; category: import('../backend/models').HelpCategory; urgency: import('../backend/models').HelpUrgency }) => {
+    if (!user) { notify('error', 'Please sign in to post a request.'); return { ok: false, error: 'Not signed in.' }; }
+    const res = await api.apiCreateHelpRequest({ id: user.id, name: user.name, avatar: user.avatar }, data);
+    if (res.ok) { await loadHelpRequests(); notify('success', 'Your request is live — editors can now help!'); return { ok: true }; }
+    return { ok: false, error: res.error };
+  }, [user, notify, loadHelpRequests]);
+
+  const claimHelpRequest = useCallback(async (id: string) => {
+    if (!user) { notify('error', 'Please sign in first.'); return { ok: false, error: 'Not signed in.' }; }
+    const res = await api.apiClaimHelpRequest({ id: user.id, name: user.name }, id);
+    if (res.ok) { await loadHelpRequests(); notify('success', "You've got this one — thanks for helping!"); return { ok: true }; }
+    notify('error', res.error || 'Could not claim request.');
+    return { ok: false, error: res.error };
+  }, [user, notify, loadHelpRequests]);
+
+  const unclaimHelpRequest = useCallback(async (id: string) => {
+    if (!user) return { ok: false, error: 'Not signed in.' };
+    const res = await api.apiUnclaimHelpRequest({ id: user.id }, id);
+    if (res.ok) { await loadHelpRequests(); notify('info', 'Released. Someone else can claim it now.'); return { ok: true }; }
+    return { ok: false, error: res.error };
+  }, [user, notify, loadHelpRequests]);
+
+  const resolveHelpRequest = useCallback(async (id: string) => {
+    if (!user) return { ok: false, error: 'Not signed in.' };
+    const res = await api.apiResolveHelpRequest({ id: user.id }, id);
+    if (res.ok) { await loadHelpRequests(); notify('success', 'Marked as resolved 🎉'); return { ok: true }; }
+    notify('error', res.error || 'Could not resolve.');
+    return { ok: false, error: res.error };
+  }, [user, notify, loadHelpRequests]);
+
+  const replyToHelpRequest = useCallback(async (id: string, content: string) => {
+    if (!user) { notify('error', 'Please sign in to reply.'); return { ok: false, error: 'Not signed in.' }; }
+    const res = await api.apiReplyToHelpRequest({ id: user.id, name: user.name, avatar: user.avatar }, id, content);
+    if (res.ok) { await loadHelpRequests(); return { ok: true }; }
+    return { ok: false, error: res.error };
+  }, [user, notify, loadHelpRequests]);
+
+  const deleteHelpRequest = useCallback(async (id: string) => {
+    if (!user) return { ok: false, error: 'Not signed in.' };
+    const res = await api.apiDeleteHelpRequest({ id: user.id }, id, user.role === 'admin');
+    if (res.ok) { await loadHelpRequests(); notify('info', 'Request deleted.'); return { ok: true }; }
+    notify('error', res.error || 'Could not delete.');
+    return { ok: false, error: res.error };
+  }, [user, notify, loadHelpRequests]);
+
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -434,6 +495,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile, updateEmail,
       inviteAdmin,
       recoveryMode, clearRecoveryMode,
+      helpRequests, loadHelpRequests,
+      createHelpRequest, claimHelpRequest, unclaimHelpRequest,
+      resolveHelpRequest, replyToHelpRequest, deleteHelpRequest,
       isAdmin,
     }}>
       {children}
