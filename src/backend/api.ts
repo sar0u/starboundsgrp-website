@@ -183,11 +183,15 @@ export async function apiUpdateEmail(newEmail: string): Promise<ApiResponse<bool
 
 // ─── Admin invitation by email ────────────────────────────
 export async function apiInviteAdmin(currentUserId: string, email: string): Promise<ApiResponse<boolean>> {
+  // In Supabase mode, the caller's admin status is decided by Supabase
+  // (via ADMIN_EMAILS + user_metadata.invitedAsAdmin in authSupabase.ts).
+  // The frontend already checks `isAdmin` before showing the invite button,
+  // so we just trust the call here and let Supabase handle it.
+  if (isSupabaseEnabled) return sbInviteAdmin(email);
+  // Demo / local mode: verify against the local users table.
   const users = loadTable<User>('users', seedUsers);
   const me = users.find(u => u.id === currentUserId);
   if (!me || me.role !== 'admin') return fail('Only admins can invite admins.', 403);
-  if (isSupabaseEnabled) return sbInviteAdmin(email);
-  // Demo mode: just mark the email as pre-approved
   return success(true);
 }
 
@@ -207,6 +211,11 @@ export async function apiVerifyEmail(email: string, code: string): Promise<ApiRe
 // ─── USER MANAGEMENT (Admin only) ─────────────────────────────
 export async function apiListUsers(adminId: string): Promise<ApiResponse<User[]>> {
   await delay(100);
+  // In Supabase mode, listing all users requires the service_role key
+  // (which we don't expose client-side for security). Return empty list —
+  // the UI shows the "Invite a new admin" card instead, which is the
+  // proper flow.
+  if (isSupabaseEnabled) return success([]);
   const users = loadTable<User>('users', seedUsers);
   const admin = users.find(u => u.id === adminId);
   if (!admin || admin.role !== 'admin') return fail('Unauthorized.', 403);
@@ -215,6 +224,11 @@ export async function apiListUsers(adminId: string): Promise<ApiResponse<User[]>
 
 export async function apiSetUserRole(adminId: string, targetUserId: string, newRole: Role): Promise<ApiResponse<User>> {
   await delay(150);
+  if (isSupabaseEnabled) {
+    // Role changes for other users require the service_role key. The UI
+    // hides the demote/promote buttons in Supabase mode (no users listed).
+    return fail('Use the email invitation form to grant admin access.', 400);
+  }
   const users = loadTable<User>('users', seedUsers);
   const admin = users.find(u => u.id === adminId);
   if (!admin || admin.role !== 'admin') return fail('Only admins can change roles.', 403);
