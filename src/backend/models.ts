@@ -125,3 +125,34 @@ export interface Booking {
   status: 'pending' | 'confirmed' | 'completed';
   createdAt: string;
 }
+
+// "Ping an Editor" — community-driven help requests
+export type HelpCategory = 'Color Grading' | 'Motion Graphics' | 'Sound Design' | 'Transitions' | 'Software' | 'Workflow' | 'Other';
+export type HelpUrgency = 'low' | 'medium' | 'high';
+export type HelpStatus = 'open' | 'claimed' | 'resolved';
+
+export interface HelpReply {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface HelpRequest {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  title: string;
+  description: string;
+  category: HelpCategory;
+  urgency: HelpUrgency;
+  status: HelpStatus;
+  claimedBy?: string;        // user id of the editor who picked it up
+  claimedByName?: string;
+  replies: HelpReply[];
+  createdAt: string;
+  resolvedAt?: string;
+}
