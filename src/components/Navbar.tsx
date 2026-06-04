@@ -17,7 +17,7 @@ const nav = [
   { label: 'Tutorials',   icon: BookOpen,       p: 2 },
   { label: 'Lounge',      icon: Users,          p: 3 },
   { label: 'Audio',       icon: Music,          p: 4 },
-  { label: 'Consulting',  icon: MessageCircle,  p: 5 },
+  { label: 'Ping',        icon: MessageCircle,  p: 5 },
 ];
 
 export default function Navbar({ currentPage, onNavigate, onLogin, onProfile, isAdmin }: Props) {
