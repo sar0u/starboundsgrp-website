@@ -384,15 +384,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const res = await withTimeout(api.apiUpdateProfile(updates), 15000, 'profile save') as any;
 
     if (res.ok && res.data) {
-      // Backend confirmed → use its authoritative copy (in case it sanitised anything).
+      // Backend confirmed → use its authoritative copy.
       setUser(res.data);
-      notify('success', 'Profile saved!');
+      notify('success', 'Profile updated successfully!');
       return { ok: true };
     } else {
       // Backend failed → roll back so the user sees their real saved state.
       setUser(previous);
-      notify('error', res.error || 'Could not save. Please try again.');
-      return { ok: false, error: res.error || 'Save failed.' };
+      notify('error', 'Could not save your changes. Please try again.');
+      return { ok: false, error: 'Save failed.' };
     }
   }, [user, notify]);
 
