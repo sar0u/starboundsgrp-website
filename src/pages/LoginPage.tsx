@@ -8,7 +8,6 @@ export default function LoginPage({ onBack }: { onBack: () => void }) {
   const { login, loginWithDiscord, register, requestPasswordReset } = useApp();
   const [isReg, setIsReg] = useState(false);
   const [show, setShow] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
 
   // Pre-warm Supabase the moment the user lands on the login page.
   // The free tier auto-pauses after inactivity; this wakes it up
@@ -26,14 +25,7 @@ export default function LoginPage({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState('');
 
-  // Track how long a request has been pending, so we can show a hint
-  // after a few seconds that the backend is waking up.
-  useEffect(() => {
-    if (!busy) { setElapsed(0); return; }
-    const start = Date.now();
-    const t = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 500);
-    return () => clearInterval(t);
-  }, [busy]);
+
 
   const sendReset = async () => {
     setErr('');
@@ -160,13 +152,8 @@ export default function LoginPage({ onBack }: { onBack: () => void }) {
                 </div>
                 <button type="submit" disabled={busy}
                   className="w-full py-3 rounded-xl btn-primary shadow-lg shadow-gold/25 disabled:opacity-60 font-bold text-sm active:scale-95 transition">
-                  {busy ? (elapsed > 4 ? `Waking up server… ${elapsed}s` : 'Processing…') : isReg ? 'Create Account' : 'Sign In'}
+                  {busy ? 'Signing in…' : isReg ? 'Create Account' : 'Sign In'}
                 </button>
-                {busy && elapsed > 6 && (
-                  <p className="text-[11px] text-ink-muted text-center mt-2 leading-relaxed">
-                    First sign-in after a while can take up to 30 seconds while the backend wakes up.
-                  </p>
-                )}
               </form>
 
               {!isReg && (
