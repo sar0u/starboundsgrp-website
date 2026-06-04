@@ -8,7 +8,7 @@
 
 import { loadTable, saveTable, loadRecord, saveRecord, generateId } from './database';
 import { seedUsers, seedScenepacks, seedTutorials, seedAudioTracks, seedRooms, seedMessages } from './seed';
-import type { User, Session, Scenepack, Tutorial, AudioTrack, ChatMessage, ChatRoom, Booking, DownloadLog, Role } from './models';
+import type { User, Session, Scenepack, Tutorial, AudioTrack, ChatMessage, ChatRoom, Booking, DownloadLog, Role, HelpRequest, HelpReply, HelpCategory, HelpUrgency } from './models';
 import { isSupabaseEnabled } from './supabase';
 import {
   sbLogin, sbRegister, sbLoginWithDiscord, sbGetCurrentUser, sbLogout, sbResendVerification,
@@ -464,4 +464,131 @@ export async function apiGetStats(): Promise<ApiResponse<{ scenepacks: number; t
   const au = loadTable<AudioTrack>('audioTracks', seedAudioTracks);
   const us = loadTable<User>('users', seedUsers);
   return success({ scenepacks: sp.length, tutorials: tu.length, audio: au.length, users: us.length });
+}
+
+// ─── PING AN EDITOR: Community help requests ──────────────────
+export async function apiGetHelpRequests(): Promise<ApiResponse<HelpRequest[]>> {
+  await delay(50);
+  const list = loadTable<HelpRequest>('helpRequests', []);
+  // Newest first, but resolved at the bottom
+  list.sort((a, b) => {
+    if (a.status === 'resolved' && b.status !== 'resolved') return 1;
+    if (b.status === 'resolved' && a.status !== 'resolved') return -1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+  return success(list);
+}
+
+export async function apiCreateHelpRequest(
+  user: { id: string; name: string; avatar: string },
+  data: { title: string; description: string; category: HelpCategory; urgency: HelpUrgency }
+): Promise<ApiResponse<HelpRequest>> {
+  await delay(120);
+  if (!user?.id) return fail('Please sign in to post a request.', 401);
+  if (!data.title.trim()) return fail('Title is required.', 400);
+  const req: HelpRequest = {
+    id: 'help_' + generateId(),
+    authorId: user.id,
+    authorName: user.name,
+    authorAvatar: user.avatar,
+    title: data.title.trim(),
+    description: data.description.trim(),
+    category: data.category,
+    urgency: data.urgency,
+    status: 'open',
+    replies: [],
+    createdAt: new Date().toISOString(),
+  };
+  const list = loadTable<HelpRequest>('helpRequests', []);
+  list.unshift(req);
+  saveTable('helpRequests', list);
+  return success(req, 201);
+}
+
+export async function apiClaimHelpRequest(
+  user: { id: string; name: string },
+  requestId: string
+): Promise<ApiResponse<HelpRequest>> {
+  await delay(100);
+  if (!user?.id) return fail('Please sign in to claim a request.', 401);
+  const list = loadTable<HelpRequest>('helpRequests', []);
+  const req = list.find(r => r.id === requestId);
+  if (!req) return fail('Request not found.', 404);
+  if (req.authorId === user.id) return fail("You can't claim your own request.", 400);
+  if (req.status === 'resolved') return fail('This request is already resolved.', 400);
+  req.status = 'claimed';
+  req.claimedBy = user.id;
+  req.claimedByName = user.name;
+  saveTable('helpRequests', list);
+  return success(req);
+}
+
+export async function apiUnclaimHelpRequest(
+  user: { id: string },
+  requestId: string
+): Promise<ApiResponse<HelpRequest>> {
+  await delay(100);
+  const list = loadTable<HelpRequest>('helpRequests', []);
+  const req = list.find(r => r.id === requestId);
+  if (!req) return fail('Request not found.', 404);
+  if (req.claimedBy !== user.id) return fail('Only the claimer can release this.', 403);
+  req.status = 'open';
+  req.claimedBy = undefined;
+  req.claimedByName = undefined;
+  saveTable('helpRequests', list);
+  return success(req);
+}
+
+export async function apiResolveHelpRequest(
+  user: { id: string },
+  requestId: string
+): Promise<ApiResponse<HelpRequest>> {
+  await delay(100);
+  const list = loadTable<HelpRequest>('helpRequests', []);
+  const req = list.find(r => r.id === requestId);
+  if (!req) return fail('Request not found.', 404);
+  // Only the original author can mark as resolved (they know if it actually helped)
+  if (req.authorId !== user.id) return fail('Only the author can mark this resolved.', 403);
+  req.status = 'resolved';
+  req.resolvedAt = new Date().toISOString();
+  saveTable('helpRequests', list);
+  return success(req);
+}
+
+export async function apiReplyToHelpRequest(
+  user: { id: string; name: string; avatar: string },
+  requestId: string,
+  content: string
+): Promise<ApiResponse<HelpRequest>> {
+  await delay(100);
+  if (!user?.id) return fail('Please sign in to reply.', 401);
+  if (!content.trim()) return fail('Reply cannot be empty.', 400);
+  const list = loadTable<HelpRequest>('helpRequests', []);
+  const req = list.find(r => r.id === requestId);
+  if (!req) return fail('Request not found.', 404);
+  const reply: HelpReply = {
+    id: 'reply_' + generateId(),
+    authorId: user.id,
+    authorName: user.name,
+    authorAvatar: user.avatar,
+    content: content.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  req.replies.push(reply);
+  saveTable('helpRequests', list);
+  return success(req);
+}
+
+export async function apiDeleteHelpRequest(
+  user: { id: string },
+  requestId: string,
+  isAdmin: boolean
+): Promise<ApiResponse<boolean>> {
+  await delay(80);
+  const list = loadTable<HelpRequest>('helpRequests', []);
+  const req = list.find(r => r.id === requestId);
+  if (!req) return fail('Request not found.', 404);
+  if (req.authorId !== user.id && !isAdmin) return fail("You can only delete your own requests.", 403);
+  saveTable('helpRequests', list.filter(r => r.id !== requestId));
+  return success(true);
 }
