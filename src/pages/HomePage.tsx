@@ -82,7 +82,7 @@ export default function HomePage({ onNavigate }: { onNavigate: (p: number) => vo
           className="flex flex-wrap gap-x-6 gap-y-2 text-xs sm:text-sm text-ink-muted font-semibold"
         >
           <span>Scenepacks</span><span>Tutorials</span><span>Audio Library</span>
-          <span>Community</span><span>Consulting</span>
+          <span>Community</span><span>Ping an Editor</span>
         </motion.div>
       </div>
     </div>
