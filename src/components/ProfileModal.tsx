@@ -11,7 +11,7 @@ const inp = "w-full pl-11 pr-4 py-3 rounded-xl bg-cream border border-ash focus:
 const lbl = "block text-sm font-bold text-ink mb-1.5";
 
 export default function ProfileModal({ isOpen, onClose }: Props) {
-  const { user, updateProfile, updateEmail, updatePassword, requestPasswordReset, notify } = useApp();
+  const { user, updateProfile, updateEmail, updatePassword, requestPasswordReset } = useApp();
   const [tab, setTab] = useState<Tab>('profile');
 
   if (!user) return null;
@@ -58,7 +58,7 @@ export default function ProfileModal({ isOpen, onClose }: Props) {
 
             {/* Body */}
             <div className="px-4 sm:px-6 py-4 sm:py-6 overflow-y-auto custom-scroll flex-1 min-h-0">
-              {tab === 'profile' && <ProfileForm onSave={updateProfile} initial={{ name: user.name, bio: user.bio || '', phone: '' }} notify={notify} />}
+              {tab === 'profile' && <ProfileForm onSave={updateProfile} initial={{ name: user.name, bio: user.bio || '', phone: '' }} />}
               {tab === 'email' && <EmailForm currentEmail={user.email} onUpdate={updateEmail} />}
               {tab === 'password' && <PasswordForm onUpdate={updatePassword} onReset={() => requestPasswordReset(user.email)} />}
             </div>
@@ -71,10 +71,9 @@ export default function ProfileModal({ isOpen, onClose }: Props) {
 
 /* ─── Profile sub-forms ──────────────────────────────────── */
 
-function ProfileForm({ initial, onSave, notify }: {
+function ProfileForm({ initial, onSave }: {
   initial: { name: string; bio: string; phone: string };
   onSave: (u: { name?: string; bio?: string; phone?: string; avatar?: string }) => Promise<{ ok: boolean; error?: string }>;
-  notify: (t: 'error', m: string) => void;
 }) {
   const [name, setName] = useState(initial.name);
   const [bio, setBio] = useState(initial.bio);
@@ -87,7 +86,10 @@ function ProfileForm({ initial, onSave, notify }: {
     setErr(''); setBusy(true);
     const res = await onSave({ name, bio, phone });
     setBusy(false);
-    if (!res.ok) { setErr(res.error || 'Update failed.'); notify('error', res.error || 'Update failed.'); }
+    // The context already shows a toast on both success and failure — no
+    // need to duplicate it here. We only surface an inline hint on failure
+    // so the form keeps the focus context.
+    if (!res.ok) setErr('Could not save. Please try again.');
   };
 
   return (
