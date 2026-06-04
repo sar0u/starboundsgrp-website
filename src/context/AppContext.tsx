@@ -123,6 +123,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (st.status === 'fulfilled' && (st.value as any).ok && (st.value as any).data) setStats((st.value as any).data);
   }, []);
 
+  // ─── Aggressive pre-warm — wake Supabase the moment the app boots ─
+  // Supabase free-tier pauses after ~7 days idle and takes 30-60s to wake up.
+  // We ping it as soon as the React tree mounts, in parallel to all other
+  // init work, so by the time the user reaches the login form the backend
+  // is usually already warm.
+  useEffect(() => {
+    const url = (import.meta as any).env.VITE_SUPABASE_URL as string | undefined;
+    if (!url) return;
+    // Fire-and-forget — multiple pings to wake auth + DB
+    const opts: RequestInit = { cache: 'no-store', mode: 'cors', keepalive: true };
+    fetch(`${url}/auth/v1/health`, opts).catch(() => {});
+    fetch(`${url}/rest/v1/`, { ...opts, headers: { apikey: (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '' } }).catch(() => {});
+  }, []);
+
   // ─── Init: restore session ─────────────────────────────────
   // Hard timeout: no matter what, the app becomes interactive in <= 4s.
   // This prevents the dreaded "stuck on Loading…" screen if Supabase is slow,
@@ -204,18 +218,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await withTimeout(api.apiLogin(email, password), 30000, 'sign-in') as any;
+    // First attempt with generous timeout (60s for cold-start case)
+    let res = await withTimeout(api.apiLogin(email, password), 60000, 'sign-in') as any;
+    // Auto-retry once if timeout — by now Supabase is almost certainly warm
+    if (!res.ok && res.error?.includes('too long')) {
+      res = await withTimeout(api.apiLogin(email, password), 30000, 'sign-in') as any;
+    }
     if (res.ok && res.data) {
       setUser(res.data.user);
       notify('success', `Welcome back, ${res.data.user.name}!`);
-      await refreshData();
+      refreshData(); // background, non-blocking
       return { ok: true };
     }
-    return { ok: false, error: res.error };
+    // Friendly error in case of repeated failure
+    const friendlyError = res.error?.includes('too long')
+      ? "The server is taking too long to respond. Please wait a few seconds and try again."
+      : res.error;
+    return { ok: false, error: friendlyError };
   }, [notify, refreshData]);
 
   const loginWithDiscord = useCallback(async () => {
-    const res = await withTimeout(api.apiLoginWithDiscord(), 25000, 'Discord sign-in') as any;
+    const res = await withTimeout(api.apiLoginWithDiscord(), 45000, 'Discord sign-in') as any;
     if (!res.ok) return { ok: false, error: res.error };
     // Supabase path: browser will redirect to Discord, then back. The auth
     // listener (above) will pick up the session and set the user.
@@ -230,7 +253,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [notify, refreshData]);
 
   const register = useCallback(async (name: string, email: string, password: string, role: 'admin' | 'user') => {
-    const res = await withTimeout(api.apiRegister(name, email, password, role), 30000, 'sign-up') as any;
+    const res = await withTimeout(api.apiRegister(name, email, password, role), 60000, 'sign-up') as any;
     if (!res.ok) return { ok: false, error: res.error };
     // Real backend: account exists but needs email confirmation before sign-in
     if (res.data?.needsVerification) {
