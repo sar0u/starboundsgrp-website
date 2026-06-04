@@ -23,7 +23,7 @@ const pages = [
   { id: 2, name: 'Tutorials', component: TutorialsPage },
   { id: 3, name: 'Lounge', component: LoungePage },
   { id: 4, name: 'Audio', component: AudioPage },
-  { id: 5, name: 'Consulting', component: ConsultingPage },
+  { id: 5, name: 'Ping',       component: ConsultingPage },
 ];
 
 // Simple horizontal slide — no 3D, no scale (prevents visual clipping)
