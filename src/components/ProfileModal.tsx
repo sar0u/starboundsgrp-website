@@ -58,9 +58,9 @@ export default function ProfileModal({ isOpen, onClose }: Props) {
 
             {/* Body */}
             <div className="px-4 sm:px-6 py-4 sm:py-6 overflow-y-auto custom-scroll flex-1 min-h-0">
-              {tab === 'profile' && <ProfileForm onSave={updateProfile} initial={{ name: user.name, bio: user.bio || '', phone: '' }} />}
-              {tab === 'email' && <EmailForm currentEmail={user.email} onUpdate={updateEmail} />}
-              {tab === 'password' && <PasswordForm onUpdate={updatePassword} onReset={() => requestPasswordReset(user.email)} />}
+              {tab === 'profile' && <ProfileForm onSave={updateProfile} onDone={onClose} initial={{ name: user.name, bio: user.bio || '', phone: user.phone || '' }} />}
+              {tab === 'email' && <EmailForm currentEmail={user.email} onUpdate={updateEmail} onDone={onClose} />}
+              {tab === 'password' && <PasswordForm onUpdate={updatePassword} onReset={() => requestPasswordReset(user.email)} onDone={onClose} />}
             </div>
           </motion.div>
         </motion.div>
@@ -71,9 +71,10 @@ export default function ProfileModal({ isOpen, onClose }: Props) {
 
 /* ─── Profile sub-forms ──────────────────────────────────── */
 
-function ProfileForm({ initial, onSave }: {
+function ProfileForm({ initial, onSave, onDone }: {
   initial: { name: string; bio: string; phone: string };
   onSave: (u: { name?: string; bio?: string; phone?: string; avatar?: string }) => Promise<{ ok: boolean; error?: string }>;
+  onDone: () => void;
 }) {
   const [name, setName] = useState(initial.name);
   const [bio, setBio] = useState(initial.bio);
@@ -86,10 +87,12 @@ function ProfileForm({ initial, onSave }: {
     setErr(''); setBusy(true);
     const res = await onSave({ name, bio, phone });
     setBusy(false);
-    // The context already shows a toast on both success and failure — no
-    // need to duplicate it here. We only surface an inline hint on failure
-    // so the form keeps the focus context.
-    if (!res.ok) setErr('Could not save. Please try again.');
+    if (res.ok) {
+      // Close the modal — the toast in the corner confirms the save.
+      onDone();
+    } else {
+      setErr('Could not save. Please try again.');
+    }
   };
 
   return (
@@ -129,9 +132,10 @@ function ProfileForm({ initial, onSave }: {
   );
 }
 
-function EmailForm({ currentEmail, onUpdate }: {
+function EmailForm({ currentEmail, onUpdate, onDone }: {
   currentEmail: string;
   onUpdate: (newEmail: string) => Promise<{ ok: boolean; error?: string }>;
+  onDone: () => void;
 }) {
   const [newEmail, setNewEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -146,7 +150,11 @@ function EmailForm({ currentEmail, onUpdate }: {
     }
     const res = await onUpdate(newEmail);
     setBusy(false);
-    if (res.ok) { setDone(true); setNewEmail(''); }
+    if (res.ok) {
+      setDone(true); setNewEmail('');
+      // Auto-close the modal after a moment so the user sees the success message
+      setTimeout(() => onDone(), 1800);
+    }
     else setErr(res.error || 'Email update failed.');
   };
 
@@ -187,9 +195,10 @@ function EmailForm({ currentEmail, onUpdate }: {
   );
 }
 
-function PasswordForm({ onUpdate, onReset }: {
+function PasswordForm({ onUpdate, onReset, onDone }: {
   onUpdate: (newPassword: string) => Promise<{ ok: boolean; error?: string }>;
   onReset: () => Promise<{ ok: boolean; error?: string }>;
+  onDone: () => void;
 }) {
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -205,8 +214,12 @@ function PasswordForm({ onUpdate, onReset }: {
     setBusy(true);
     const res = await onUpdate(pw);
     setBusy(false);
-    if (res.ok) { setDone(true); setPw(''); setPw2(''); }
-    else setErr(res.error || 'Update failed.');
+    if (res.ok) {
+      setDone(true); setPw(''); setPw2('');
+      setTimeout(() => onDone(), 1500);
+    } else {
+      setErr(res.error || 'Update failed.');
+    }
   };
 
   const sendReset = async () => {
