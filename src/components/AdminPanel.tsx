@@ -68,6 +68,14 @@ export default function AdminPanel({ isOpen, onClose }: Props) {
 const inp = "w-full px-4 py-2.5 rounded-xl bg-cream border border-ash focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 transition-all text-sm";
 const lbl = "block text-sm font-bold text-ink mb-1.5";
 
+function timeSinceShort(iso: string): string {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 function ScenepackForm({ onSubmit }: { onSubmit: (d: any) => void }) {
   const [f, s] = useState({ title: '', category: 'Urban', duration: '10 min', clips: 20, tags: '', isPremium: false, resolution: '4K', description: '' });
   const [file, setFile] = useState<{ url?: string; name?: string; size?: string }>({});
@@ -129,6 +137,16 @@ function AudioForm({ onSubmit }: { onSubmit: (d: any) => void }) {
 }
 
 /* ─── Users Manager — promote / demote members ─────────── */
+interface PendingInvite { email: string; sentAt: string; }
+const INVITES_KEY = 'sgrp_pending_invites';
+
+function loadPending(): PendingInvite[] {
+  try { return JSON.parse(localStorage.getItem(INVITES_KEY) || '[]'); } catch { return []; }
+}
+function savePending(list: PendingInvite[]) {
+  try { localStorage.setItem(INVITES_KEY, JSON.stringify(list)); } catch { /* ignore */ }
+}
+
 function UsersManager() {
   const { listUsers, setUserRole, user: me, inviteAdmin } = useApp();
   const [users, setUsers] = useState<User[]>([]);
@@ -138,15 +156,51 @@ function UsersManager() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [pending, setPending] = useState<PendingInvite[]>(() => loadPending());
 
   const sendInvite = async () => {
     setInviteMsg(null);
-    if (!inviteEmail.includes('@')) { setInviteMsg({ type: 'err', text: 'Enter a valid email.' }); return; }
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email.includes('@') || email.length < 5) {
+      setInviteMsg({ type: 'err', text: 'Please enter a valid email address.' });
+      return;
+    }
+    if (pending.some(p => p.email === email)) {
+      setInviteMsg({ type: 'err', text: 'An invitation is already pending for this email.' });
+      return;
+    }
     setInviting(true);
-    const res = await inviteAdmin(inviteEmail);
+    const res = await inviteAdmin(email);
     setInviting(false);
-    if (res.ok) { setInviteMsg({ type: 'ok', text: `Invitation sent to ${inviteEmail}` }); setInviteEmail(''); }
-    else { setInviteMsg({ type: 'err', text: res.error || 'Could not send invite.' }); }
+    if (res.ok) {
+      const next = [{ email, sentAt: new Date().toISOString() }, ...pending];
+      setPending(next);
+      savePending(next);
+      setInviteMsg({ type: 'ok', text: `Magic link sent to ${email}. They'll be admin once they click it.` });
+      setInviteEmail('');
+    } else {
+      setInviteMsg({ type: 'err', text: res.error || 'Could not send invite.' });
+    }
+  };
+
+  const removePending = (email: string) => {
+    const next = pending.filter(p => p.email !== email);
+    setPending(next);
+    savePending(next);
+  };
+
+  const resendInvite = async (email: string) => {
+    setInviting(true);
+    const res = await inviteAdmin(email);
+    setInviting(false);
+    if (res.ok) {
+      const next = pending.map(p => p.email === email ? { ...p, sentAt: new Date().toISOString() } : p);
+      setPending(next);
+      savePending(next);
+      setInviteMsg({ type: 'ok', text: `New link sent to ${email}.` });
+    } else {
+      setInviteMsg({ type: 'err', text: res.error || 'Could not resend.' });
+    }
   };
 
   const refresh = async () => {
@@ -204,6 +258,48 @@ function UsersManager() {
           </div>
         )}
       </div>
+
+      {/* Pending invitations — local record so the admin knows who they invited */}
+      {pending.length > 0 && (
+        <div>
+          <h4 className="text-xs font-extrabold text-ink-muted uppercase tracking-wide mb-2 px-1">
+            Pending invitations · {pending.length}
+          </h4>
+          <div className="space-y-2">
+            {pending.map(p => (
+              <div key={p.email} className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                  <Mail size={15} className="text-amber-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-ink truncate">{p.email}</div>
+                  <div className="text-[11px] text-ink-muted">
+                    Awaiting click · sent {timeSinceShort(p.sentAt)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => resendInvite(p.email)}
+                  disabled={inviting}
+                  className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-amber-700 text-[11px] font-bold disabled:opacity-50 transition"
+                  title="Resend invitation"
+                >
+                  Resend
+                </button>
+                <button
+                  onClick={() => removePending(p.email)}
+                  className="px-2 py-1.5 rounded-lg hover:bg-amber-100 text-amber-700 transition"
+                  title="Remove from list"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-ink-muted mt-2 px-1">
+            ℹ️ Removed when invitee accepts. Asking them to check spam may help.
+          </p>
+        </div>
+      )}
 
       <input
         type="text" value={query} onChange={e => setQuery(e.target.value)}
