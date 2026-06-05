@@ -17,6 +17,7 @@ export interface User {
   bio: string;
   downloads: number;
   isVerified: boolean;
+  phone?: string;
 }
 
 export interface Session {
