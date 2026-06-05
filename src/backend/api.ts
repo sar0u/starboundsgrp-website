@@ -13,7 +13,12 @@ import { isSupabaseEnabled } from './supabase';
 import {
   sbLogin, sbRegister, sbLoginWithDiscord, sbGetCurrentUser, sbLogout, sbResendVerification,
   sbRequestPasswordReset, sbUpdatePassword, sbUpdateProfile, sbUpdateEmail, sbInviteAdmin,
+  sbFetchAdminEmails,
 } from './authSupabase';
+import { tableList, tableInsert, tableDelete } from './supabaseTables';
+
+// Re-export for AppContext to use
+export { sbFetchAdminEmails };
 
 export { isSupabaseEnabled };
 
@@ -242,18 +247,20 @@ export async function apiSetUserRole(adminId: string, targetUserId: string, newR
 
 // ─── SCENEPACKS ───────────────────────────────────────────────
 export async function apiGetScenepacks(): Promise<ApiResponse<Scenepack[]>> {
+  if (isSupabaseEnabled) {
+    const list = await tableList<Scenepack>('scenepacks');
+    return success(list.filter((p) => p.status === 'published'));
+  }
   await delay(80);
   const packs = loadTable<Scenepack>('scenepacks', seedScenepacks);
   return success(packs.filter((p) => p.status === 'published'));
 }
 
-export async function apiCreateScenepack(userId: string, data: Partial<Scenepack>): Promise<ApiResponse<Scenepack>> {
-  await delay(200);
-  const users = loadTable<User>('users', seedUsers);
-  const user = users.find((u) => u.id === userId);
-  if (!user || user.role !== 'admin') return fail('Only administrators can create scenepacks.', 403);
+export async function apiCreateScenepack(
+  user: { id: string; name: string; role?: string },
+  data: Partial<Scenepack>
+): Promise<ApiResponse<Scenepack>> {
   if (!data.title?.trim()) return fail('Title is required.', 400);
-  const packs = loadTable<Scenepack>('scenepacks', seedScenepacks);
   const newPack: Scenepack = {
     id: 'sp_' + generateId(),
     title: data.title!.trim(),
@@ -265,7 +272,7 @@ export async function apiCreateScenepack(userId: string, data: Partial<Scenepack
     tags: data.tags || [],
     isPremium: data.isPremium || false,
     thumbnail: 'custom',
-    authorId: userId,
+    authorId: user.id,
     authorName: user.name,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -276,16 +283,29 @@ export async function apiCreateScenepack(userId: string, data: Partial<Scenepack
     fileUrl: data.fileUrl,
     fileName: data.fileName,
   };
+  if (isSupabaseEnabled) {
+    const r = await tableInsert('scenepacks', newPack);
+    if (!r.ok) return fail(r.error || 'Could not publish.', 500);
+    return success(newPack, 201);
+  }
+  // Local demo mode
+  await delay(200);
+  const users = loadTable<User>('users', seedUsers);
+  const me = users.find((u) => u.id === user.id);
+  if (!me || me.role !== 'admin') return fail('Only administrators can publish.', 403);
+  const packs = loadTable<Scenepack>('scenepacks', seedScenepacks);
   packs.unshift(newPack);
   saveTable('scenepacks', packs);
   return success(newPack, 201);
 }
 
-export async function apiDeleteScenepack(userId: string, packId: string): Promise<ApiResponse<boolean>> {
+export async function apiDeleteScenepack(_user: { id: string }, packId: string): Promise<ApiResponse<boolean>> {
+  if (isSupabaseEnabled) {
+    const r = await tableDelete('scenepacks', packId);
+    if (!r.ok) return fail(r.error || 'Could not delete.', 500);
+    return success(true);
+  }
   await delay();
-  const users = loadTable<User>('users', seedUsers);
-  const user = users.find((u) => u.id === userId);
-  if (!user || user.role !== 'admin') return fail('Unauthorized.', 403);
   let packs = loadTable<Scenepack>('scenepacks', seedScenepacks);
   packs = packs.filter((p) => p.id !== packId);
   saveTable('scenepacks', packs);
@@ -294,18 +314,20 @@ export async function apiDeleteScenepack(userId: string, packId: string): Promis
 
 // ─── TUTORIALS ────────────────────────────────────────────────
 export async function apiGetTutorials(): Promise<ApiResponse<Tutorial[]>> {
+  if (isSupabaseEnabled) {
+    const list = await tableList<Tutorial>('tutorials');
+    return success(list.filter((t) => t.status === 'published'));
+  }
   await delay(80);
   const tuts = loadTable<Tutorial>('tutorials', seedTutorials);
   return success(tuts.filter((t) => t.status === 'published'));
 }
 
-export async function apiCreateTutorial(userId: string, data: Partial<Tutorial>): Promise<ApiResponse<Tutorial>> {
-  await delay(200);
-  const users = loadTable<User>('users', seedUsers);
-  const user = users.find((u) => u.id === userId);
-  if (!user || user.role !== 'admin') return fail('Only administrators can create tutorials.', 403);
+export async function apiCreateTutorial(
+  user: { id: string; name: string; avatar: string; role?: string },
+  data: Partial<Tutorial>
+): Promise<ApiResponse<Tutorial>> {
   if (!data.title?.trim()) return fail('Title is required.', 400);
-  const tuts = loadTable<Tutorial>('tutorials', seedTutorials);
   const newTut: Tutorial = {
     id: 't_' + generateId(),
     title: data.title!.trim(),
@@ -317,7 +339,7 @@ export async function apiCreateTutorial(userId: string, data: Partial<Tutorial>)
     likes: 0,
     author: user.name,
     authorInitials: user.avatar,
-    authorId: userId,
+    authorId: user.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     content: data.content || '',
@@ -325,16 +347,28 @@ export async function apiCreateTutorial(userId: string, data: Partial<Tutorial>)
     fileUrl: data.fileUrl,
     fileName: data.fileName,
   };
+  if (isSupabaseEnabled) {
+    const r = await tableInsert('tutorials', newTut);
+    if (!r.ok) return fail(r.error || 'Could not publish.', 500);
+    return success(newTut, 201);
+  }
+  await delay(200);
+  const users = loadTable<User>('users', seedUsers);
+  const me = users.find((u) => u.id === user.id);
+  if (!me || me.role !== 'admin') return fail('Only administrators can publish.', 403);
+  const tuts = loadTable<Tutorial>('tutorials', seedTutorials);
   tuts.unshift(newTut);
   saveTable('tutorials', tuts);
   return success(newTut, 201);
 }
 
-export async function apiDeleteTutorial(userId: string, tutId: string): Promise<ApiResponse<boolean>> {
+export async function apiDeleteTutorial(_user: { id: string }, tutId: string): Promise<ApiResponse<boolean>> {
+  if (isSupabaseEnabled) {
+    const r = await tableDelete('tutorials', tutId);
+    if (!r.ok) return fail(r.error || 'Could not delete.', 500);
+    return success(true);
+  }
   await delay();
-  const users = loadTable<User>('users', seedUsers);
-  const user = users.find((u) => u.id === userId);
-  if (!user || user.role !== 'admin') return fail('Unauthorized.', 403);
   let tuts = loadTable<Tutorial>('tutorials', seedTutorials);
   tuts = tuts.filter((t) => t.id !== tutId);
   saveTable('tutorials', tuts);
@@ -343,18 +377,20 @@ export async function apiDeleteTutorial(userId: string, tutId: string): Promise<
 
 // ─── AUDIO ────────────────────────────────────────────────────
 export async function apiGetAudioTracks(): Promise<ApiResponse<AudioTrack[]>> {
+  if (isSupabaseEnabled) {
+    const list = await tableList<AudioTrack>('audio_tracks');
+    return success(list.filter((t) => t.status === 'published'));
+  }
   await delay(80);
   const tracks = loadTable<AudioTrack>('audioTracks', seedAudioTracks);
   return success(tracks.filter((t) => t.status === 'published'));
 }
 
-export async function apiCreateAudioTrack(userId: string, data: Partial<AudioTrack>): Promise<ApiResponse<AudioTrack>> {
-  await delay(200);
-  const users = loadTable<User>('users', seedUsers);
-  const user = users.find((u) => u.id === userId);
-  if (!user || user.role !== 'admin') return fail('Only administrators can upload audio.', 403);
+export async function apiCreateAudioTrack(
+  user: { id: string; name: string; role?: string },
+  data: Partial<AudioTrack>
+): Promise<ApiResponse<AudioTrack>> {
   if (!data.title?.trim()) return fail('Title is required.', 400);
-  const tracks = loadTable<AudioTrack>('audioTracks', seedAudioTracks);
   const newTrack: AudioTrack = {
     id: 'a_' + generateId(),
     title: data.title!.trim(),
@@ -364,7 +400,7 @@ export async function apiCreateAudioTrack(userId: string, data: Partial<AudioTra
     bpm: data.bpm || 120,
     plays: 0,
     likes: 0,
-    authorId: userId,
+    authorId: user.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     description: data.description || '',
@@ -373,6 +409,16 @@ export async function apiCreateAudioTrack(userId: string, data: Partial<AudioTra
     fileUrl: data.fileUrl,
     fileName: data.fileName,
   };
+  if (isSupabaseEnabled) {
+    const r = await tableInsert('audio_tracks', newTrack);
+    if (!r.ok) return fail(r.error || 'Could not publish.', 500);
+    return success(newTrack, 201);
+  }
+  await delay(200);
+  const users = loadTable<User>('users', seedUsers);
+  const me = users.find((u) => u.id === user.id);
+  if (!me || me.role !== 'admin') return fail('Only administrators can publish.', 403);
+  const tracks = loadTable<AudioTrack>('audioTracks', seedAudioTracks);
   tracks.unshift(newTrack);
   saveTable('audioTracks', tracks);
   return success(newTrack, 201);
