@@ -150,8 +150,11 @@ export async function sbResendVerification(email: string): Promise<ApiResponse<b
 // ─── Password reset ─────────────────────────────────────────
 export async function sbRequestPasswordReset(email: string): Promise<ApiResponse<boolean>> {
   if (!supabase) return ko('Supabase not configured.', 500);
+  // We add ?reset=1 as a fallback marker — even if the SDK misses the
+  // PASSWORD_RECOVERY event for some reason, we can still detect we should
+  // show the reset modal by reading the URL.
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: `${window.location.origin}`,
+    redirectTo: `${window.location.origin}/?reset=1`,
   });
   if (error) return ko(translateError(error.message), 400);
   return ok(true);
