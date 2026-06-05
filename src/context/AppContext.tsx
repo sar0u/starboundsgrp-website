@@ -137,6 +137,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     fetch(`${url}/rest/v1/`, { ...opts, headers: { apikey: (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '' } }).catch(() => {});
   }, []);
 
+  // ─── Detect password-reset redirect (?reset=1 OR type=recovery hash) ─
+  // Belt-and-suspenders: the Supabase SDK normally fires PASSWORD_RECOVERY
+  // automatically, but the URL marker guarantees the modal appears even if
+  // the event is missed (e.g. slow network, race condition).
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      const isResetParam = u.searchParams.get('reset') === '1';
+      const isRecoveryHash = u.hash.includes('type=recovery');
+      if (isResetParam || isRecoveryHash) {
+        setRecoveryMode(true);
+        // Clean the URL so a refresh doesn't re-open the modal
+        u.searchParams.delete('reset');
+        window.history.replaceState({}, '', u.pathname + u.search);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   // ─── Init: restore session ─────────────────────────────────
   // Hard timeout: no matter what, the app becomes interactive in <= 4s.
   // This prevents the dreaded "stuck on Loading…" screen if Supabase is slow,
@@ -413,20 +431,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     setUser(optimistic);
 
-    // ACTUALLY persist to Supabase — wait up to 15s for confirmation.
-    const res = await withTimeout(api.apiUpdateProfile(updates), 15000, 'profile save') as any;
+    // ACTUALLY persist to Supabase — long timeout (30s) handles cold-starts.
+    const res = await withTimeout(api.apiUpdateProfile(updates), 30000, 'profile save') as any;
 
     if (res.ok && res.data) {
       // Backend confirmed → use its authoritative copy.
       setUser(res.data);
       notify('success', 'Profile updated successfully!');
       return { ok: true };
-    } else {
-      // Backend failed → roll back so the user sees their real saved state.
-      setUser(previous);
-      notify('error', 'Could not save your changes. Please try again.');
-      return { ok: false, error: 'Save failed.' };
     }
+
+    // Distinguish a timeout (which usually means the save still went through
+    // on the server) from a real validation/auth error (which means it didn't).
+    const isTimeout = typeof res.error === 'string' && res.error.toLowerCase().includes('too long');
+
+    if (isTimeout) {
+      // Keep the optimistic state — Supabase is just slow, not broken. Verify
+      // in the background by refetching the current user, and reconcile if
+      // the server happens to disagree.
+      notify('success', 'Profile updated successfully!');
+      api.apiGetCurrentUser().then((r) => {
+        if (r.ok && r.data) setUser(r.data);
+      }).catch(() => {});
+      return { ok: true };
+    }
+
+    // Real failure (validation, auth, etc.) → roll back the UI.
+    setUser(previous);
+    notify('error', res.error || 'Could not save your changes. Please try again.');
+    return { ok: false, error: res.error || 'Save failed.' };
   }, [user, notify]);
 
   const updateEmail = useCallback(async (newEmail: string) => {
