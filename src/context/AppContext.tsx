@@ -127,14 +127,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Supabase free-tier pauses after ~7 days idle and takes 30-60s to wake up.
   // We ping it as soon as the React tree mounts, in parallel to all other
   // init work, so by the time the user reaches the login form the backend
-  // is usually already warm.
+  // is usually already warm. We ALSO fetch the shared admin_emails table
+  // so `buildUser` can determine the role correctly for any session.
   useEffect(() => {
     const url = (import.meta as any).env.VITE_SUPABASE_URL as string | undefined;
     if (!url) return;
-    // Fire-and-forget — multiple pings to wake auth + DB
     const opts: RequestInit = { cache: 'no-store', mode: 'cors', keepalive: true };
     fetch(`${url}/auth/v1/health`, opts).catch(() => {});
     fetch(`${url}/rest/v1/`, { ...opts, headers: { apikey: (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '' } }).catch(() => {});
+    // Load shared admin email allowlist (used by buildUser to grant admin role)
+    api.sbFetchAdminEmails().catch(() => {});
   }, []);
 
   // ─── Detect password-reset redirect (?reset=1 OR type=recovery hash) ─
@@ -301,35 +303,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── CRUD ───────────────────────────────────────────────────
   const addScenepack = useCallback(async (data: Partial<Scenepack>) => {
     if (!user) return { ok: false, error: 'Not signed in.' };
-    const res = await api.apiCreateScenepack(user.id, data);
+    const res = await api.apiCreateScenepack({ id: user.id, name: user.name, role: user.role }, data);
     if (res.ok) { await refreshData(); notify('success', 'Scenepack published!'); return { ok: true }; }
+    notify('error', res.error || 'Could not publish.');
     return { ok: false, error: res.error };
   }, [user, refreshData, notify]);
 
   const addTutorial = useCallback(async (data: Partial<Tutorial>) => {
     if (!user) return { ok: false, error: 'Not signed in.' };
-    const res = await api.apiCreateTutorial(user.id, data);
+    const res = await api.apiCreateTutorial({ id: user.id, name: user.name, avatar: user.avatar, role: user.role }, data);
     if (res.ok) { await refreshData(); notify('success', 'Tutorial published!'); return { ok: true }; }
+    notify('error', res.error || 'Could not publish.');
     return { ok: false, error: res.error };
   }, [user, refreshData, notify]);
 
   const addAudioTrack = useCallback(async (data: Partial<AudioTrack>) => {
     if (!user) return { ok: false, error: 'Not signed in.' };
-    const res = await api.apiCreateAudioTrack(user.id, data);
+    const res = await api.apiCreateAudioTrack({ id: user.id, name: user.name, role: user.role }, data);
     if (res.ok) { await refreshData(); notify('success', 'Audio track published!'); return { ok: true }; }
+    notify('error', res.error || 'Could not publish.');
     return { ok: false, error: res.error };
   }, [user, refreshData, notify]);
 
   const deleteScenepack = useCallback(async (id: string) => {
     if (!user) return;
-    await api.apiDeleteScenepack(user.id, id);
+    await api.apiDeleteScenepack({ id: user.id }, id);
     await refreshData();
     notify('info', 'Scenepack removed.');
   }, [user, refreshData, notify]);
 
   const deleteTutorial = useCallback(async (id: string) => {
     if (!user) return;
-    await api.apiDeleteTutorial(user.id, id);
+    await api.apiDeleteTutorial({ id: user.id }, id);
     await refreshData();
     notify('info', 'Tutorial removed.');
   }, [user, refreshData, notify]);
