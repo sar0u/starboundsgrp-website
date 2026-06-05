@@ -9,33 +9,30 @@ import type { ApiResponse } from './api';
 
 // Root admin(s). Any account created with one of these emails becomes admin
 // automatically. From the Admin Panel → Users tab, the root admin can then
-// promote/demote any other user without touching this list.
-const ADMIN_EMAILS = ['sarah.4univ@gmail.com'];
+// invite more admins (those get added to the shared `admin_emails` Supabase
+// table so every browser knows about them).
+const ROOT_ADMIN_EMAILS = ['sarah.4univ@gmail.com'];
 
-const INVITED_KEY = 'sgrp_invited_admins'; // local fallback list
+// In-memory cache of the shared admin_emails table, refreshed at boot.
+let invitedAdminCache: Set<string> = new Set();
+export function setInvitedAdminCache(emails: string[]) {
+  invitedAdminCache = new Set(emails.map(e => e.toLowerCase()));
+}
+export function getCachedInvitedAdmins(): string[] {
+  return Array.from(invitedAdminCache);
+}
 
 function ok<T>(data: T, status = 200): ApiResponse<T> { return { ok: true, data, status }; }
 function ko(error: string, status = 400): ApiResponse<never> { return { ok: false, error, status }; }
-
-function getInvitedAdmins(): string[] {
-  try { return JSON.parse(localStorage.getItem(INVITED_KEY) || '[]'); } catch { return []; }
-}
-function addInvitedAdmin(email: string) {
-  const list = getInvitedAdmins();
-  const lower = email.toLowerCase();
-  if (!list.includes(lower)) {
-    list.push(lower);
-    localStorage.setItem(INVITED_KEY, JSON.stringify(list));
-  }
-}
 
 function buildUser(authUser: any): User {
   const meta = authUser.user_metadata || {};
   const email = (authUser.email || '').toLowerCase();
   const name: string = meta.name || meta.full_name || meta.preferred_username || meta.user_name || email.split('@')[0] || 'Editor';
   const explicitRole = (meta.role as Role | undefined);
-  const invited = !!meta.invitedAsAdmin || getInvitedAdmins().includes(email);
-  const role: Role = explicitRole === 'admin' || ADMIN_EMAILS.includes(email) || invited ? 'admin' : 'user';
+  const isInvited = invitedAdminCache.has(email);
+  const isRoot = ROOT_ADMIN_EMAILS.includes(email);
+  const role: Role = explicitRole === 'admin' || isRoot || isInvited ? 'admin' : 'user';
   return {
     id: authUser.id,
     name,
@@ -48,6 +45,7 @@ function buildUser(authUser: any): User {
     bio: meta.bio || '',
     downloads: 0,
     isVerified: !!authUser.email_confirmed_at || !!authUser.confirmed_at,
+    phone: meta.phone || authUser.phone || '',
   };
 }
 
@@ -197,22 +195,50 @@ export async function sbUpdateEmail(newEmail: string): Promise<ApiResponse<boole
 export async function sbInviteAdmin(email: string): Promise<ApiResponse<boolean>> {
   if (!supabase) return ko('Supabase not configured.', 500);
   const lower = email.trim().toLowerCase();
-  if (!lower.includes('@')) return ko('Invalid email address.', 400);
-  // Remember this address — so when they sign up we instantly grant admin role
-  addInvitedAdmin(lower);
-  // Send a magic link with metadata flag. If they're new → they get an
-  // invitation email and a one-click sign-up. If they already have an
-  // account → they get a sign-in link.
-  const { error } = await supabase.auth.signInWithOtp({
-    email: lower,
-    options: {
-      data: { invitedAsAdmin: true, role: 'admin' },
-      emailRedirectTo: `${window.location.origin}`,
-      shouldCreateUser: true,
-    },
-  });
-  if (error) return ko(translateError(error.message), 400);
+  if (!lower.includes('@') || lower.length < 5) return ko('Invalid email address.', 400);
+
+  // 1) Persist the invite in a SHARED Supabase table so every browser knows
+  //    this email is admin. The buildUser() function then picks it up at sign-in.
+  const { error: insErr } = await supabase
+    .from('admin_emails')
+    .upsert({ email: lower }, { onConflict: 'email' });
+  if (insErr) {
+    // If the table doesn't exist yet, give a friendly setup hint.
+    if (insErr.message?.toLowerCase().includes('relation') || insErr.code === '42P01') {
+      return ko('Admin invites need a one-time Supabase setup. See SETUP_SUPABASE.md.', 500);
+    }
+    return ko(insErr.message || 'Could not save invite.', 500);
+  }
+
+  // 2) Update local cache immediately so the current admin sees it work
+  invitedAdminCache.add(lower);
+
+  // 3) Try to send a magic link too (optional — invite is already valid).
+  //    If this fails (rate-limit, template missing, etc.) we still succeed
+  //    because the user can just sign up normally with that email.
+  try {
+    await supabase.auth.signInWithOtp({
+      email: lower,
+      options: {
+        data: { invitedAsAdmin: true, role: 'admin' },
+        emailRedirectTo: `${window.location.origin}`,
+        shouldCreateUser: true,
+      },
+    });
+  } catch { /* magic-link is a nice-to-have */ }
+
   return ok(true);
+}
+
+// Fetch shared admin emails from Supabase and refresh the local cache.
+// Called once at app boot from AppContext.
+export async function sbFetchAdminEmails(): Promise<string[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from('admin_emails').select('email');
+  if (error || !data) return [];
+  const list = data.map((r: any) => (r.email as string).toLowerCase());
+  setInvitedAdminCache(list);
+  return list;
 }
 
 function translateError(msg: string): string {
